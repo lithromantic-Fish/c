@@ -1,0 +1,79 @@
+:root {
+  --primary: #2175E6;
+  --primary-light: #E8F1FC;
+  --page-bg: #F5F6F8;
+  --card-bg: #FFFFFF;
+  --text-1: #1A1A1A;
+  --text-2: #323233;
+  --text-3: #8C8C8C;
+  --text-4: #B0B0B0;
+  --border: #EDEFF2;
+  --danger: #FA5151;
+  --success: #07C160;
+  --dot-red: #E81515;
+  --tag-purple-bg: #5221E60F;
+  --tag-purple-border: #5221E619;
+  --tag-purple-text: #5221E6;
+  --tag-green-bg: #00B6860F;
+  --tag-green-border: #00B68619;
+  --tag-green-text: #00B686;
+  --tag-orange-bg: #EB710E0F;
+  --tag-orange-border: #EB710E19;
+  --tag-orange-text: #EB710E;
+  --tag-grey-bg: #F7F8FA;
+  --tag-grey-border: #EBEDF0;
+  --tag-grey-text: #646464;
+  --title-color: #323233;
+  --nav-bar-height: 44px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body, #app { height: 100%; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue",
+    "Microsoft YaHei", sans-serif;
+  font-size: 14px;
+  color: var(--text-1);
+  background: var(--page-bg);
+  -webkit-font-smoothing: antialiased;
+}
+a { color: inherit; text-decoration: none; }
+button { font-family: inherit; }
+img, svg { display: block; }
+
+.van-nav-bar {
+  background: var(--primary);
+  --van-nav-bar-title-text-color: #fff;
+  --van-nav-bar-icon-color: #fff;
+  --van-nav-bar-text-color: #fff;
+  --van-nav-bar-arrow-size: 18px;
+  --van-nav-bar-title-font-size: 17px;
+}
+.van-nav-bar .van-icon { color: #fff !important; }
+.van-nav-bar__title { font-weight: 500; }
+
+.van-tabs__line { background: var(--primary) !important; }
+.van-tab--active { color: var(--primary) !important; font-weight: 600; }
+
+.van-button--primary {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+.van-empty__description { color: var(--text-3); }
+
+.app-frame .van-overlay {
+  position: absolute !important;
+  left: 0 !important;
+  right: 0 !important;
+  width: 100% !important;
+}
+.app-frame .van-popup {
+  position: absolute !important;
+  left: 0 !important;
+  right: 0 !important;
+  width: 100% !important;
+  max-width: 100% !important;
+}

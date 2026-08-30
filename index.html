@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#2175E6" />
+    <title>流程一站通</title>
+    <script>
+      (function () {
+        var host = location.hostname
+        var enable =
+          host === 'localhost' ||
+          host.indexOf('flow-test') >= 0 ||
+          /[?&]vconsole=1/.test(location.search) ||
+          (window.config && window.config.enableVConsole === true)
+        if (!enable) return
+        document.write(
+          '<script src="https://unpkg.com/vconsole@3.15.1/dist/vconsole.min.js"><\/script>',
+        )
+      })()
+    </script>
+    <script>
+      if (window.VConsole && !window.__VCONSOLE__) {
+        window.__VCONSOLE__ = new window.VConsole({ theme: 'dark' })
+        console.log('[vConsole] index.html')
+      }
+      window.onerror = function (msg, url, line, col, err) {
+        console.error('[onerror]', msg, url, line + ':' + col, err)
+      }
+      window.addEventListener('unhandledrejection', function (e) {
+        console.error('[unhandledrejection]', e.reason)
+      })
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
