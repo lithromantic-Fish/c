@@ -61,44 +61,46 @@
       </div>
     </div>
 
-    <div v-if="searching && keyword" class="search-summary">
-      共搜索出{{ total }}个结果
-    </div>
-
-    <van-pull-refresh
-      v-model="refreshing"
-      @refresh="onRefresh"
-      success-text="刷新完成"
-      pulling-text="下拉刷新"
-      loosing-text="松手刷新"
-      loading-text="加载中..."
-    >
-      <van-list
-        v-if="filteredList.length || loading"
-        v-model:loading="loading"
-        :finished="finished"
-        :immediate-check="false"
-        finished-text="没有更多了"
-        loading-text="加载中..."
-        error-text="加载失败，点击重试"
-        v-model:error="loadError"
-        @load="onLoad"
-      >
-        <div class="list">
-          <FlowItem
-            v-for="item in filteredList"
-            :key="item.id"
-            :item="item"
-            :status="activeTab"
-            @click="onItemClick(item)"
-          />
-        </div>
-      </van-list>
-      <div v-else class="empty">
-        <img :src="picNull" />
-        <p>未筛选出满足条件的{{ tabLabel }}</p>
+    <div class="list-scroll" :class="{ 'is-refreshing': refreshing }">
+      <div v-if="searching && keyword" class="search-summary">
+        共搜索出{{ total }}个结果
       </div>
-    </van-pull-refresh>
+
+      <van-pull-refresh
+        v-model="refreshing"
+        @refresh="onRefresh"
+        success-text="刷新完成"
+        pulling-text="下拉刷新"
+        loosing-text="松手刷新"
+        loading-text="加载中..."
+      >
+        <van-list
+          v-if="filteredList.length || loading"
+          v-model:loading="loading"
+          :finished="finished"
+          :immediate-check="false"
+          finished-text="没有更多了"
+          loading-text="加载中..."
+          error-text="加载失败，点击重试"
+          v-model:error="loadError"
+          @load="onLoad"
+        >
+          <div class="list">
+            <FlowItem
+              v-for="item in filteredList"
+              :key="item.id"
+              :item="item"
+              :status="activeTab"
+              @click="onItemClick(item)"
+            />
+          </div>
+        </van-list>
+        <div v-else class="empty">
+          <img :src="picNull" />
+          <p>未筛选出满足条件的{{ tabLabel }}</p>
+        </div>
+      </van-pull-refresh>
+    </div>
 
     <!-- 分类下拉面板 -->
     <van-popup
@@ -680,16 +682,45 @@ const onRefresh = async () => {
 
 <style lang="scss" scoped>
 .climb {
-  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
   background: var(--page-bg);
 }
 
 .sticky-header {
-  position: sticky;
-  top: 0;
+  position: relative;
+  flex: 0 0 auto;
   z-index: 100;
   background: #fff;
   padding-top: var(--safe-top);
+}
+
+/* 只允许列表内容区滚动，避免 iOS WebView 回弹时把顶部 Tab 一起带走。 */
+.list-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.list-scroll::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.list-scroll :deep(.van-pull-refresh),
+.list-scroll :deep(.van-pull-refresh__track) {
+  min-height: 100%;
 }
 
 :deep(.van-tabs__nav) {
@@ -878,6 +909,11 @@ const onRefresh = async () => {
   padding: 16px;
   font-size: 12px;
   color: var(--text-4);
+}
+
+/* 下拉刷新已有顶部加载提示，此时隐藏列表自身的加载提示。 */
+.list-scroll.is-refreshing :deep(.van-list__loading) {
+  display: none;
 }
 
 .empty {
