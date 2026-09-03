@@ -1,5 +1,6 @@
 import http from '@/api/http'
 const BASE = '/api/process-center/commissionTask'
+const REMINDER_BASE = '/api/process-center/reminderMessage'
 
 /**
  * 兼容 { status, data } / { code, data } / 直接数字段 等多种后端包裹
@@ -19,6 +20,18 @@ export function unwrapApiData(res) {
 /** 首页待办总数 GET（与 workflow_center_ui Home.vue 一致） */
 export function fetchHomeWorkCount(params) {
   return http.get(`${BASE}/queryWorkCount/v2`, { params })
+}
+
+/** 获取超时催办提醒开关：data 为字符串 "0" / "1" */
+export function fetchReminderSetting() {
+  return http.get(`${REMINDER_BASE}/get/v1`)
+}
+
+/** 设置超时催办提醒开关：0 关闭，1 开启 */
+export function updateReminderSetting(flag) {
+  return http.get(`${REMINDER_BASE}/update/v1`, {
+    params: { flag: flag ? 1 : 0 },
+  })
 }
 
 /** 四 Tab 角标 GET（后端使用 queryWorkCount/v2 返回四类数量） */

@@ -838,26 +838,40 @@ const onRefresh = async () => {
   align-items: center;
   padding: 0 12px;
   .s-icon {
+    flex: 0 0 14px;
     width: 14px;
     height: 14px;
     margin-right: 6px;
     opacity: 0.55;
   }
   .placeholder {
+    display: block;
     color: var(--text-4);
     font-size: 13px;
+    line-height: 20px;
   }
   .s-input {
-    flex: 1;
+    flex: 1 1 0;
+    min-width: 0;
+    height: 20px;
+    margin: 0;
+    padding: 0;
     border: 0;
+    border-radius: 0;
     background: transparent;
     outline: none;
+    appearance: none;
+    -webkit-appearance: none;
     font-size: 14px;
+    line-height: 20px;
     color: var(--text-1);
   }
   .s-clear {
+    flex: 0 0 16px;
     width: 16px;
     height: 16px;
+    margin-left: 6px;
+    object-fit: contain;
   }
   &.active {
     background: #fff;
@@ -885,10 +899,16 @@ const onRefresh = async () => {
   }
 }
 .cancel-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
   color: var(--primary);
   font-size: 14px;
+  line-height: 20px;
   padding: 0 4px;
   flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .search-summary {
