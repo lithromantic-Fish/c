@@ -67,12 +67,12 @@
       </button>
     </footer>
 
-    <van-action-sheet
+    <UserTreePicker
       v-model:show="showAgent"
+      :model-value="form.agentId"
       title="选择代理人"
-      :actions="agentActions"
-      teleport=".app-frame"
-      @select="selectAgent"
+      :departments="proxyDepartmentTree"
+      @confirm="selectAgent"
     />
     <van-action-sheet
       v-model:show="showScope"
@@ -81,30 +81,12 @@
       teleport=".app-frame"
       @select="selectScope"
     />
-    <van-popup v-model:show="showFlows" position="bottom" round teleport=".app-frame">
-      <div class="flow-picker">
-        <div class="picker-head">
-          <button type="button" @click="showFlows = false">取消</button>
-          <strong>选择流程</strong>
-          <button type="button" @click="confirmFlows">确定</button>
-        </div>
-        <van-checkbox-group v-model="selectedFlowCodes">
-          <van-cell-group inset>
-            <van-cell
-              v-for="flow in proxyFlowOptions"
-              :key="flow.code"
-              clickable
-              :title="flow.name"
-              @click="toggleFlow(flow)"
-            >
-              <template #right-icon>
-                <van-checkbox :name="flow.code" @click.stop />
-              </template>
-            </van-cell>
-          </van-cell-group>
-        </van-checkbox-group>
-      </div>
-    </van-popup>
+    <ProxyFlowPicker
+      v-model:show="showFlows"
+      :model-value="form.flowCodes"
+      :tree="proxyFlowTree"
+      @confirm="confirmFlows"
+    />
     <van-popup v-model:show="showDate" position="bottom" round teleport=".app-frame">
       <van-date-picker
         v-model="dateValue"
@@ -123,6 +105,8 @@ import { computed, onMounted, reactive, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { showToast } from "vant";
 import { addProxy, updateProxy } from "@/api/proxy";
+import ProxyFlowPicker from "@/components/ProxyFlowPicker.vue";
+import UserTreePicker from "@/components/UserTreePicker.vue";
 import { getStorage } from "@/utils/storage";
 import {
   PROXY_SCOPE_ALL,
@@ -131,8 +115,9 @@ import {
   ensureProxyFlows,
   ensureProxyPeople,
   getProxyRecord,
+  proxyDepartmentTree,
   proxyFlowOptions,
-  proxyPeople,
+  proxyFlowTree,
 } from "@/store/proxy";
 
 const route = useRoute();
@@ -154,14 +139,10 @@ const showAgent = ref(false);
 const showScope = ref(false);
 const showFlows = ref(false);
 const showDate = ref(false);
-const selectedFlowCodes = ref([]);
 const dateField = ref("startDate");
 const dateValue = ref([]);
 const submitting = ref(false);
 
-const agentActions = computed(() =>
-  proxyPeople.value.map((person) => ({ ...person, name: person.name })),
-);
 const scopeActions = [
   { name: "全部代理", value: PROXY_SCOPE_ALL },
   { name: "部分代理", value: PROXY_SCOPE_PARTIAL },
@@ -193,19 +174,12 @@ function selectScope(action) {
   if (action.value === PROXY_SCOPE_ALL) {
     form.flows = [];
     form.flowCodes = [];
-    selectedFlowCodes.value = [];
   }
   showScope.value = false;
 }
 
-function toggleFlow(flow) {
-  const index = selectedFlowCodes.value.indexOf(flow.code);
-  if (index >= 0) selectedFlowCodes.value.splice(index, 1);
-  else selectedFlowCodes.value.push(flow.code);
-}
-
-function confirmFlows() {
-  form.flowCodes = [...selectedFlowCodes.value];
+function confirmFlows(codes) {
+  form.flowCodes = [...codes];
   form.flows = proxyFlowOptions.value
     .filter((flow) => form.flowCodes.includes(flow.code))
     .map((flow) => flow.name);
@@ -272,7 +246,6 @@ onMounted(async () => {
         .filter((flow) => form.flows.includes(flow.name))
         .map((flow) => flow.code);
     }
-    selectedFlowCodes.value = [...form.flowCodes];
   } catch (error) {
     console.error("[proxy-form] options load failed:", error);
     showToast(error?.message || "获取代理选项失败");
@@ -394,26 +367,4 @@ onMounted(async () => {
   }
 }
 
-.flow-picker {
-  padding-bottom: calc(16px + var(--safe-bottom));
-}
-
-.picker-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 52px;
-  padding: 0 16px;
-
-  button {
-    border: 0;
-    color: var(--primary);
-    background: transparent;
-    font-size: 14px;
-  }
-
-  strong {
-    font-size: 16px;
-  }
-}
 </style>

@@ -41,12 +41,12 @@
       <button class="primary" type="button" @click="confirm">确定</button>
     </footer>
 
-    <van-action-sheet
+    <UserTreePicker
       v-model:show="showAgent"
+      :model-value="draft.agentId"
       title="选择代理人"
-      :actions="agentActions"
-      teleport=".app-frame"
-      @select="selectAgent"
+      :departments="proxyDepartmentTree"
+      @confirm="selectAgent"
     />
     <van-action-sheet
       v-model:show="showScope"
@@ -72,12 +72,13 @@
 import { computed, onActivated, onMounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 import { showToast } from "vant";
+import UserTreePicker from "@/components/UserTreePicker.vue";
 import {
   PROXY_SCOPE_ALL,
   PROXY_SCOPE_PARTIAL,
   ensureProxyPeople,
+  proxyDepartmentTree,
   proxyFilterState,
-  proxyPeople,
   resetProxyFilter,
 } from "@/store/proxy";
 
@@ -97,9 +98,6 @@ const showDate = ref(false);
 const dateField = ref("startDate");
 const dateValue = ref([]);
 
-const agentActions = computed(() =>
-  proxyPeople.value.map((person) => ({ ...person, name: person.name })),
-);
 const scopeActions = [
   { name: "全部代理", value: PROXY_SCOPE_ALL },
   { name: "部分代理", value: PROXY_SCOPE_PARTIAL },

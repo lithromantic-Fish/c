@@ -1178,7 +1178,7 @@ const onRefresh = async () => {
   overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  background: #fff;
+  background: var(--page-bg);
 }
 
 .proxy-card {

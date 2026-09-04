@@ -6,7 +6,9 @@ export const PROXY_SCOPE_ALL = "all";
 export const PROXY_SCOPE_PARTIAL = "partial";
 
 export const proxyPeople = ref([]);
+export const proxyDepartmentTree = ref([]);
 export const proxyFlowOptions = ref([]);
+export const proxyFlowTree = ref([]);
 export const proxyRecords = ref([]);
 
 export const proxyFilterState = reactive({
@@ -44,7 +46,7 @@ export function unwrapProxyPayload(response) {
 
 export function assertProxySuccess(response, fallbackMessage) {
   const status = String(response?.status ?? response?.code ?? "");
-  if ((status !== "200" && status !== "0") || response?.rel === false) {
+  if (status !== "200" && status !== "0") {
     throw new Error(response?.message || fallbackMessage);
   }
   return response;
@@ -88,13 +90,32 @@ export function appendProxyRecords(records) {
 export function setProxyPeople(tree = []) {
   const people = [];
   const seen = new Set();
-  tree.forEach((dept) => {
-    (dept.userBooks || dept.users || []).forEach((user) => {
+  proxyDepartmentTree.value = tree.map((dept) => {
+    const users = (dept.userBooks || dept.users || []).map((user) => {
       const id = String(user.usercode || user.userCode || user.id || "");
       const name = user.username || user.userName || user.name || "";
-      if (!id || !name || seen.has(id)) return;
-      seen.add(id);
-      people.push({ id, name, deptName: dept.deptName || dept.name || "" });
+      const person = {
+        id,
+        name,
+        deptName: dept.deptName || dept.name || "",
+      };
+      if (id && name && !seen.has(id)) {
+        seen.add(id);
+        people.push(person);
+      }
+      return person;
+    }).filter((person) => person.id && person.name);
+    return {
+      name: dept.deptName || dept.name || "",
+      users,
+    };
+  }).filter((dept) => dept.name && dept.users.length);
+  proxyDepartmentTree.value.forEach((dept) => {
+    dept.users.forEach((person) => {
+      if (!seen.has(person.id)) {
+        seen.add(person.id);
+        people.push(person);
+      }
     });
   });
   proxyPeople.value = people;
@@ -115,24 +136,42 @@ export async function ensureProxyPeople() {
   return proxyPeoplePromise;
 }
 
-function collectWorkflowRows(value, result = []) {
-  if (Array.isArray(value)) {
-    value.forEach((item) => collectWorkflowRows(item, result));
-    return result;
-  }
-  if (!value || typeof value !== "object") return result;
-  const code = value.workflowCode || value.workFlowCode || value.code || value.value;
-  const name = value.workflowName || value.workFlowName || value.name || value.text;
-  if (code && name) result.push({ code: String(code), name: String(name) });
-  Object.values(value).forEach((child) => {
-    if (child && typeof child === "object") collectWorkflowRows(child, result);
+function normalizeWorkflowNode(item, depth = 1) {
+  if (!item || typeof item !== "object" || depth > 3) return null;
+  const code =
+    item.processClassificationCode ||
+    item.workflowCode ||
+    item.workFlowCode ||
+    item.code ||
+    item.value;
+  const name =
+    item.processClassificationName ||
+    item.workflowName ||
+    item.workFlowName ||
+    item.name ||
+    item.text;
+  const children = (item.children || item.childList || [])
+    .map((child) => normalizeWorkflowNode(child, depth + 1))
+    .filter(Boolean);
+  if (!code || !name) return null;
+  return { code: String(code), name: String(name), children, depth };
+}
+
+function collectSelectableFlows(nodes, result = []) {
+  nodes.forEach((node) => {
+    if (node.children.length) collectSelectableFlows(node.children, result);
+    else result.push({ code: node.code, name: node.name });
   });
   return result;
 }
 
 export function setProxyFlowOptions(payload) {
+  const source = Array.isArray(payload) ? payload : payload?.rows || [];
+  proxyFlowTree.value = source
+    .map((item) => normalizeWorkflowNode(item))
+    .filter(Boolean);
   const seen = new Set();
-  proxyFlowOptions.value = collectWorkflowRows(payload).filter((flow) => {
+  proxyFlowOptions.value = collectSelectableFlows(proxyFlowTree.value).filter((flow) => {
     if (seen.has(flow.code)) return false;
     seen.add(flow.code);
     return true;
