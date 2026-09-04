@@ -5,6 +5,8 @@ export const ROUTES = {
   mobileApproval: `${PAGE_BASE}/mobileApproval`,
   climbProcess: `${PAGE_BASE}/climbProcess`,
   advancedFilter: `${PAGE_BASE}/AdvancedFilter`,
+  proxyFilter: `${PAGE_BASE}/ProxyFilter`,
+  proxyForm: `${PAGE_BASE}/ProxyForm`,
   nosupported: `${PAGE_BASE}/Nosupported`,
   redirect: `${PAGE_BASE}/redirect`,
   index: `${PAGE_BASE}/index`,

@@ -26,6 +26,8 @@ const ENTRY_ROUTE_MAP = {
   index: ROUTES.index,
   climbProcess: ROUTES.climbProcess,
   AdvancedFilter: ROUTES.advancedFilter,
+  ProxyFilter: ROUTES.proxyFilter,
+  ProxyForm: ROUTES.proxyForm,
   Nosupported: ROUTES.nosupported,
 };
 

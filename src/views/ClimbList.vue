@@ -12,56 +12,132 @@
           <template #title>
             <span class="tab-title">
               {{ t.label }}
-              <span class="tab-badge">{{ t.count }}</span>
+              <span v-if="t.showCount !== false" class="tab-badge">{{ t.count }}</span>
             </span>
           </template>
         </van-tab>
       </van-tabs>
 
       <div class="toolbar">
-        <div
-          class="cat-btn"
-          :class="{ active: catOpen || !!filterState.parentworkflowcode }"
-          @click="catOpen = !catOpen"
-        >
-          <span class="cat-label">{{ catLabel }}</span>
-          <img :src="catOpen ? arrowUp : arrowDown" class="cat-arrow" />
-        </div>
+        <template v-if="isProxyTab">
+          <div class="search-box proxy-search-box">
+            <img :src="searchIcon" class="s-icon" />
+            <input
+              v-model="proxyKeyword"
+              class="s-input"
+              placeholder="搜索代理人"
+            />
+            <img
+              v-if="proxyKeyword"
+              :src="deleteIcon"
+              class="s-clear"
+              @click="proxyKeyword = ''"
+            />
+          </div>
+          <button
+            class="filter-btn"
+            :class="{ active: proxyFilterActive }"
+            type="button"
+            aria-label="代理高级筛选"
+            @click="goProxyFilter"
+          >
+            <img :src="proxyFilterActive ? filterIconActive : filterIcon" />
+          </button>
+        </template>
+        <template v-else>
+          <div
+            class="cat-btn"
+            :class="{ active: catOpen || !!filterState.parentworkflowcode }"
+            @click="catOpen = !catOpen"
+          >
+            <span class="cat-label">{{ catLabel }}</span>
+            <img :src="catOpen ? arrowUp : arrowDown" class="cat-arrow" />
+          </div>
 
-        <div v-if="!searching" class="search-box" @click="enterSearch">
-          <img :src="searchIcon" class="s-icon" />
-          <span class="placeholder">流程标题、创建人...</span>
-        </div>
-        <div v-else class="search-box active">
-          <img :src="searchIcon" class="s-icon" />
-          <input
-            ref="searchInput"
-            v-model="keyword"
-            class="s-input"
-            placeholder="流程标题、创建人..."
-            @keydown.enter="onSearch"
-          />
-          <img
-            v-if="keyword"
-            :src="deleteIcon"
-            class="s-clear"
-            @click="keyword = ''"
-          />
-        </div>
+          <div v-if="!searching" class="search-box" @click="enterSearch">
+            <img :src="searchIcon" class="s-icon" />
+            <span class="placeholder">流程标题、创建人...</span>
+          </div>
+          <div v-else class="search-box active">
+            <img :src="searchIcon" class="s-icon" />
+            <input
+              ref="searchInput"
+              v-model="keyword"
+              class="s-input"
+              placeholder="流程标题、创建人..."
+              @keydown.enter="onSearch"
+            />
+            <img
+              v-if="keyword"
+              :src="deleteIcon"
+              class="s-clear"
+              @click="keyword = ''"
+            />
+          </div>
 
-        <button
-          v-if="!searching"
-          class="filter-btn"
-          :class="{ active: hasFilter }"
-          @click="goFilter"
-        >
-          <img :src="hasFilter ? filterIconActive : filterIcon" />
-        </button>
-        <span v-else class="cancel-btn" @click="cancelSearch">取消</span>
+          <button
+            v-if="!searching"
+            class="filter-btn"
+            :class="{ active: hasFilter }"
+            type="button"
+            @click="goFilter"
+          >
+            <img :src="hasFilter ? filterIconActive : filterIcon" />
+          </button>
+          <span v-else class="cancel-btn" @click="cancelSearch">取消</span>
+        </template>
       </div>
     </div>
 
-    <div class="list-scroll" :class="{ 'is-refreshing': refreshing }">
+    <template v-if="isProxyTab">
+      <div class="proxy-list-scroll">
+        <van-pull-refresh v-model="proxyRefreshing" @refresh="refreshProxyList">
+          <van-list
+            v-if="visibleProxyRecords.length || proxyLoading"
+            v-model:loading="proxyLoading"
+            v-model:error="proxyLoadError"
+            :finished="proxyFinished"
+            :immediate-check="false"
+            finished-text="没有更多了"
+            loading-text="加载中..."
+            error-text="加载失败，点击重试"
+            @load="loadProxyNextPage"
+          >
+            <article v-for="record in visibleProxyRecords" :key="record.id" class="proxy-card">
+              <div class="proxy-card-head">
+                <span class="proxy-avatar" :class="record.avatarTone">{{ record.agentName.slice(0, 1) }}</span>
+                <strong>{{ record.agentName }}</strong>
+                <span class="proxy-status" :class="record.status">{{ record.statusText }}</span>
+              </div>
+              <p class="proxy-meta">
+                <span>{{ record.scope === PROXY_SCOPE_ALL ? "全部代理" : "部分代理" }}</span>
+                <i></i>
+                <span>{{ record.startDate }}至{{ record.endDate }}</span>
+              </p>
+              <p v-if="record.scope === PROXY_SCOPE_PARTIAL" class="proxy-flows">
+                <span>代理流程：</span>{{ record.flows.join("、") || "-" }}
+              </p>
+              <div class="proxy-actions">
+                <button type="button" @click="editProxy(record)">
+                  <img :src="proxyEditIcon" alt="" />编辑
+                </button>
+                <button type="button" class="delete" @click="confirmDeleteProxy(record)">
+                  <img :src="proxyDeleteIcon" alt="" />删除
+                </button>
+              </div>
+            </article>
+          </van-list>
+          <div v-else class="proxy-empty">暂无符合条件的代理</div>
+        </van-pull-refresh>
+      </div>
+      <div class="proxy-add-footer">
+        <button type="button" @click="createProxy">
+          <img :src="proxyAddIcon" alt="" />新建代理
+        </button>
+      </div>
+    </template>
+
+    <div v-else class="list-scroll" :class="{ 'is-refreshing': refreshing }">
       <div v-if="searching && keyword" class="search-summary">
         共搜索出{{ total }}个结果
       </div>
@@ -163,7 +239,8 @@ import {
   updateReadedProcess,
   UPDATE_READED_PROCESS_TYPE,
 } from "@/api/process";
-import { showToast } from "vant";
+import { fetchProxyList, removeProxies } from "@/api/proxy";
+import { showConfirmDialog, showToast } from "vant";
 import {
   filterState,
   pickCategory,
@@ -171,6 +248,22 @@ import {
   resetFilter,
 } from "@/store/modules/filter";
 import { resumePendingPcenterOpen, toDeal } from "@/utils/workflowOpen";
+import { ROUTES } from "@/constants/routes";
+import {
+  PROXY_SCOPE_ALL,
+  PROXY_SCOPE_PARTIAL,
+  appendProxyRecords,
+  assertProxySuccess,
+  deleteProxyRecord,
+  ensureProxyPeople,
+  hasProxyFilter,
+  mapProxyRecord,
+  proxyFilterState,
+  proxyPeople,
+  proxyRecords,
+  setProxyRecords,
+  unwrapProxyPayload,
+} from "@/store/proxy";
 import searchIcon from "@/assets/icons/ic_Search.svg";
 import filterIcon from "@/assets/icons/ic_Filter.svg";
 import filterIconActive from "@/assets/icons/ic_Filter_Active.svg";
@@ -178,10 +271,13 @@ import arrowDown from "@/assets/icons/ic_ArrowDown.svg";
 import arrowUp from "@/assets/icons/ic_ArrowUp.svg";
 import deleteIcon from "@/assets/icons/ic_Delete.svg";
 import picNull from "@/assets/icons/Pic_Null.svg";
+import proxyAddIcon from "@/assets/proxy/ic-add.svg";
+import proxyDeleteIcon from "@/assets/proxy/ic-delete.svg";
+import proxyEditIcon from "@/assets/proxy/ic-edit.svg";
 
 const router = useRouter();
 
-const VALID_LIST_TABS = ["todo", "done", "unread", "read"];
+const VALID_LIST_TABS = ["todo", "done", "unread", "read", "proxy"];
 const PAGE_TITLE = "CLIMB流程";
 
 function syncPageTitle() {
@@ -205,8 +301,10 @@ const tabs = computed(() => [
   { key: "done", label: "已办", count: tabCounts.value.done },
   { key: "unread", label: "待阅", count: tabCounts.value.unread },
   { key: "read", label: "已阅", count: tabCounts.value.read },
+  { key: "proxy", label: "代理", showCount: false },
 ]);
 const activeTab = ref(initialListTab());
+const isProxyTab = computed(() => activeTab.value === "proxy");
 const tabLabel = computed(
   () => tabs.value.find((t) => t.key === activeTab.value)?.label || "",
 );
@@ -547,6 +645,14 @@ async function resetAndLoad() {
 const suppressFilterStateWatch = ref(false);
 
 watch(activeTab, async (tab) => {
+  catOpen.value = false;
+  searching.value = false;
+  keyword.value = "";
+  if (tab === "proxy") {
+    await resetProxyAndLoad();
+    resizeTabsLine();
+    return;
+  }
   filterState.listTab = tab;
   suppressFilterStateWatch.value = true;
   resetFilter();
@@ -565,7 +671,7 @@ watch(
   () =>
     [filterState.parentworkflowcode, filterState.categoryPathName, filterState.advanced],
   () => {
-    if (suppressFilterStateWatch.value) return;
+    if (suppressFilterStateWatch.value || isProxyTab.value) return;
     syncCategoryFromFilterState();
     resetAndLoad();
     void refreshTabCounts();
@@ -585,6 +691,11 @@ watch(
 onMounted(async () => {
   syncPageTitle();
   if (resumePendingPcenterOpen()) return;
+  if (isProxyTab.value) {
+    await resetProxyAndLoad();
+    resizeTabsLine();
+    return;
+  }
   filterState.listTab = activeTab.value;
   await loadCategories();
   syncCategoryFromFilterState();
@@ -594,14 +705,19 @@ onMounted(async () => {
 });
 /** keep-alive 下首屏会依次触发 onMounted（异步未完成）与 onActivated，二者都调 load 会并发请求同一页并追加两次 */
 const skipNextActivatedLoad = ref(true);
-onActivated(() => {
+onActivated(async () => {
   syncPageTitle();
   if (resumePendingPcenterOpen()) return;
-  syncCategoryFromFilterState();
   if (skipNextActivatedLoad.value) {
     skipNextActivatedLoad.value = false;
     return;
   }
+  if (isProxyTab.value) {
+    await resetProxyAndLoad();
+    resizeTabsLine();
+    return;
+  }
+  syncCategoryFromFilterState();
   resetAndLoad();
   void refreshTabCounts();
 });
@@ -621,6 +737,7 @@ const cancelSearch = () => {
 let searchTimer = null;
 function debounceSearch() {
   clearTimeout(searchTimer);
+  if (isProxyTab.value) return;
   searchTimer = setTimeout(() => {
     resetAndLoad();
     void refreshTabCounts();
@@ -638,6 +755,142 @@ const goFilter = () => {
   filterState.listTab = activeTab.value;
   router.push("/uniflow/front/pages/AdvancedFilter");
 };
+
+const proxyKeyword = ref("");
+const proxyFilterActive = computed(() => hasProxyFilter());
+const visibleProxyRecords = computed(() => {
+  if (!proxyFilterState.scope) return proxyRecords.value;
+  return proxyRecords.value.filter((record) => record.scope === proxyFilterState.scope);
+});
+const proxyPage = ref(0);
+const proxyTotal = ref(0);
+const proxyLoading = ref(false);
+const proxyFinished = ref(false);
+const proxyLoadError = ref(false);
+const proxyRefreshing = ref(false);
+let proxyFetchGeneration = 0;
+function resolveProxyAgentId() {
+  if (proxyFilterState.agentId) return proxyFilterState.agentId;
+  const keyword = proxyKeyword.value.trim();
+  if (!keyword) return "";
+  const exactPerson = proxyPeople.value.find(
+    (item) => item.name === keyword || item.id === keyword,
+  );
+  const fuzzyPerson = proxyPeople.value.find((item) => item.name.includes(keyword));
+  return exactPerson?.id || fuzzyPerson?.id || keyword;
+}
+
+function buildProxyParams(pageNum) {
+  return {
+    agentId: resolveProxyAgentId(),
+    workFlowCode: proxyFilterState.workflowCode || "",
+    pageNum,
+    pageSize,
+    startTimeState: "",
+    startTimeBegin: proxyFilterState.startDate || "",
+    startTime: "",
+    endTimeState: "",
+    endTimeBegin: "",
+    endTime: proxyFilterState.endDate || "",
+  };
+}
+
+async function loadProxyNextPage() {
+  if (proxyFinished.value) {
+    proxyLoading.value = false;
+    return;
+  }
+  const generation = proxyFetchGeneration;
+  try {
+    proxyLoadError.value = false;
+    const nextPage = proxyPage.value + 1;
+    const response = await fetchProxyList(buildProxyParams(nextPage));
+    if (generation !== proxyFetchGeneration) return;
+    assertProxySuccess(response, "获取代理失败");
+    const payload = unwrapProxyPayload(response) || {};
+    const rows = Array.isArray(payload) ? payload : payload.rows || [];
+    const records = rows.map(mapProxyRecord);
+    proxyPage.value = nextPage;
+    proxyTotal.value = Number(payload.total ?? rows.length) || 0;
+    appendProxyRecords(records);
+    if (proxyRecords.value.length >= proxyTotal.value || rows.length < pageSize) {
+      proxyFinished.value = true;
+    }
+  } catch (error) {
+    if (generation === proxyFetchGeneration) {
+      proxyLoadError.value = true;
+      console.error("[proxy-list] load failed:", error);
+    }
+  } finally {
+    if (generation === proxyFetchGeneration) proxyLoading.value = false;
+  }
+}
+
+async function resetProxyAndLoad() {
+  proxyFetchGeneration += 1;
+  setProxyRecords([]);
+  proxyPage.value = 0;
+  proxyTotal.value = 0;
+  proxyFinished.value = false;
+  proxyLoadError.value = false;
+  proxyLoading.value = true;
+  try {
+    await ensureProxyPeople();
+  } catch (error) {
+    console.error("[proxy-people] load failed:", error);
+  }
+  await loadProxyNextPage();
+}
+
+async function refreshProxyList() {
+  try {
+    await resetProxyAndLoad();
+  } finally {
+    proxyRefreshing.value = false;
+  }
+}
+
+let proxySearchTimer = null;
+watch(proxyKeyword, () => {
+  if (!isProxyTab.value) return;
+  clearTimeout(proxySearchTimer);
+  proxySearchTimer = setTimeout(resetProxyAndLoad, 350);
+});
+
+function goProxyFilter() {
+  router.push(ROUTES.proxyFilter);
+}
+
+function createProxy() {
+  router.push(ROUTES.proxyForm);
+}
+
+function editProxy(record) {
+  router.push({ path: ROUTES.proxyForm, query: { id: record.id } });
+}
+
+async function confirmDeleteProxy(record) {
+  try {
+    await showConfirmDialog({
+      title: "确定删除该代理吗？",
+      cancelButtonText: "取消",
+      confirmButtonText: "确定删除",
+      confirmButtonColor: "#e81515",
+    });
+  } catch {
+    return;
+  }
+  try {
+    if (!record.objectIds.length) throw new Error("代理记录缺少删除标识");
+    const response = await removeProxies(record.objectIds);
+    assertProxySuccess(response, "删除代理失败");
+    deleteProxyRecord(record.id);
+    showToast("删除成功");
+  } catch (error) {
+    console.error("[proxy-delete] failed:", error);
+    showToast(error?.message || "删除代理失败");
+  }
+}
 
 /**
  * 点击任务项：根据 mobiletype 分发。
@@ -730,7 +983,7 @@ const onRefresh = async () => {
   border-bottom: 1px solid var(--border);
 }
 :deep(.van-tab) {
-  flex: 0 0 25%;
+  flex: 0 0 20%;
   min-width: 0;
   padding: 0 2px;
 }
@@ -917,6 +1170,171 @@ const onRefresh = async () => {
   font-size: 12px;
   color: var(--text-3);
   background: var(--page-bg);
+}
+
+.proxy-list-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  background: #fff;
+}
+
+.proxy-card {
+  padding: 18px 16px 16px;
+  border-bottom: 8px solid var(--page-bg);
+  background: #fff;
+}
+
+.proxy-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  strong {
+    flex: 1;
+    min-width: 0;
+    color: #323233;
+    font-size: 18px;
+    line-height: 24px;
+  }
+}
+
+.proxy-avatar {
+  display: grid;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  border: 1px solid #b6d6ff;
+  border-radius: 50%;
+  color: var(--primary);
+  background: #edf5ff;
+  font-size: 13px;
+  place-items: center;
+
+  &.photo-blue {
+    color: #fff;
+    border-color: #6ab1dd;
+    background: linear-gradient(145deg, #80d2e8, #306c9a);
+  }
+
+  &.photo-gold {
+    color: #fff;
+    border-color: #f3b33d;
+    background: linear-gradient(145deg, #ffe06c, #ef7c1d);
+  }
+}
+
+.proxy-status {
+  flex: 0 0 auto;
+  padding: 3px 8px;
+  border: 1px solid #cfe2ff;
+  border-radius: 4px;
+  color: var(--primary);
+  background: #f4f8ff;
+  font-size: 13px;
+  line-height: 18px;
+
+  &.ended {
+    border-color: #ebedf0;
+    color: #646566;
+    background: #f7f8fa;
+  }
+}
+
+.proxy-meta,
+.proxy-flows {
+  margin: 10px 0 0;
+  color: #646566;
+  font-size: 14px;
+  line-height: 24px;
+  letter-spacing: 0;
+}
+
+.proxy-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  i {
+    width: 1px;
+    height: 14px;
+    background: #ebedf0;
+  }
+}
+
+.proxy-flows {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+
+  span {
+    color: #323233;
+  }
+}
+
+.proxy-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 10px;
+
+  button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    height: 28px;
+    padding: 0;
+    border: 0;
+    border-radius: 4px;
+    color: #323233;
+    background: #f5f5f5;
+    font-size: 14px;
+    line-height: 20px;
+  }
+
+  img {
+    width: 16px;
+    height: 16px;
+    margin-right: 4px;
+  }
+
+}
+
+.proxy-empty {
+  padding: 120px 16px 0;
+  color: #969799;
+  font-size: 14px;
+  text-align: center;
+}
+
+.proxy-add-footer {
+  flex: 0 0 auto;
+  padding: 12px 16px calc(12px + var(--safe-bottom));
+  border-top: 1px solid #ebedf0;
+  background: #fff;
+
+  button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 48px;
+    padding: 0;
+    border: 0;
+    border-radius: 4px;
+    color: #fff;
+    background: var(--primary);
+    font-size: 16px;
+  }
+
+  img {
+    width: 20px;
+    height: 20px;
+    margin-right: 8px;
+  }
 }
 
 .list {

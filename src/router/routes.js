@@ -35,6 +35,18 @@ const routes = [
     meta: { title: "高级筛选", ignoreAuth: true, keepAlive: true },
   },
   {
+    path: ROUTES.proxyFilter,
+    name: "ProxyFilter",
+    component: () => import("@/views/ProxyFilter.vue"),
+    meta: { title: "高级筛选", ignoreAuth: true },
+  },
+  {
+    path: ROUTES.proxyForm,
+    name: "ProxyForm",
+    component: () => import("@/views/ProxyForm.vue"),
+    meta: { title: "新建代理", ignoreAuth: true },
+  },
+  {
     path: ROUTES.nosupported,
     name: "Nosupported",
     component: () => import("@/views/NotSupported.vue"),
