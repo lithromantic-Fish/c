@@ -38,7 +38,10 @@
           @click="showFlows = true"
         >
           <span class="label">流程名称</span>
-          <span class="value ellipsis" :class="{ placeholder: !form.flows.length }">
+          <span
+            class="value ellipsis"
+            :class="{ placeholder: !form.flows.length }"
+          >
             {{ flowLabel }}
           </span>
           <van-icon v-if="!isEditing" name="arrow" />
@@ -67,8 +70,15 @@
     </section>
 
     <footer class="page-footer">
-      <button class="secondary" type="button" @click="router.back()">取消</button>
-      <button class="primary" type="button" :disabled="submitting" @click="submit">
+      <button class="secondary" type="button" @click="router.back()">
+        取消
+      </button>
+      <button
+        class="primary"
+        type="button"
+        :disabled="submitting"
+        @click="submit"
+      >
         {{ submitting ? "提交中..." : isEditing ? "保存" : "确定" }}
       </button>
     </footer>
@@ -93,7 +103,12 @@
       :tree="proxyFlowTree"
       @confirm="confirmFlows"
     />
-    <van-popup v-model:show="showDate" position="bottom" round teleport=".app-frame">
+    <van-popup
+      v-model:show="showDate"
+      position="bottom"
+      round
+      teleport=".app-frame"
+    >
       <van-date-picker
         v-model="dateValue"
         title="选择日期"
@@ -153,8 +168,12 @@ const scopeActions = [
   { name: "全部代理", value: PROXY_SCOPE_ALL },
   { name: "部分代理", value: PROXY_SCOPE_PARTIAL },
 ];
-const scopeLabel = computed(() => form.scope === PROXY_SCOPE_PARTIAL ? "部分代理" : "全部代理");
-const flowLabel = computed(() => form.flows.length ? form.flows.join("、") : "请选择");
+const scopeLabel = computed(() =>
+  form.scope === PROXY_SCOPE_PARTIAL ? "部分代理" : "全部代理",
+);
+const flowLabel = computed(() =>
+  form.flows.length ? form.flows.join("、") : "请选择",
+);
 
 function hydrate() {
   const record = getProxyRecord(String(route.query.id || ""));
@@ -217,7 +236,9 @@ function currentDateText() {
 function openDate(field) {
   dateField.value = field;
   const today = currentDateText();
-  dateValue.value = dateArray(form[field] && form[field] >= today ? form[field] : today);
+  dateValue.value = dateArray(
+    form[field] && form[field] >= today ? form[field] : today,
+  );
   showDate.value = true;
 }
 
@@ -231,21 +252,42 @@ function confirmDate({ selectedValues }) {
   showDate.value = false;
 }
 
+function getProxySubmitErrorMessage(error, fallbackMessage) {
+  const responseData = error?.response?.data || error;
+  const nestedError = responseData?.error;
+  return (
+    responseData?.message ||
+    (typeof nestedError === "string" ? nestedError : nestedError?.message) ||
+    error?.message ||
+    fallbackMessage
+  );
+}
+
+function assertProxySubmitSuccess(response, fallbackMessage) {
+  const status = String(response?.status ?? response?.code ?? "");
+  const failedStatus = status && status !== "200" && status !== "0";
+  if (response?.error || response?.rel === false || failedStatus) {
+    throw new Error(getProxySubmitErrorMessage(response, fallbackMessage));
+  }
+}
+
 async function submit() {
   if (submitting.value) return;
   if (!form.agentName) return showToast("请选择代理人");
-  if (form.scope === PROXY_SCOPE_PARTIAL && !form.flowCodes.length) return showToast("请选择代理流程");
+  if (form.scope === PROXY_SCOPE_PARTIAL && !form.flowCodes.length)
+    return showToast("请选择代理流程");
   if (!form.startDate || !form.endDate) return showToast("请选择代理时间");
   const today = currentDateText();
   if (form.startDate < today) return showToast("开始时间不能早于当前时间");
   if (form.endDate < today) return showToast("结束时间不能早于当前时间");
-  if (form.startDate > form.endDate) return showToast("结束时间不能早于开始时间");
+  if (form.startDate > form.endDate)
+    return showToast("结束时间不能早于开始时间");
   const payload = {
     agentId: form.agentId,
     startTime: form.startDate,
     endTime: form.endDate,
     isAllworkflow: form.scope === PROXY_SCOPE_ALL ? 999 : 0,
-    workFlowCodes: form.scope === PROXY_SCOPE_ALL ? [] : [...form.flowCodes],
+    workflowCodes: form.scope === PROXY_SCOPE_ALL ? [] : [...form.flowCodes],
   };
   if (isEditing.value) {
     if (!form.objectIds.length) return showToast("代理记录缺少编辑标识");
@@ -253,20 +295,19 @@ async function submit() {
   }
 
   submitting.value = true;
+  const fallbackMessage = isEditing.value
+    ? "编辑代理任务失败"
+    : "新增代理任务失败";
   try {
     const response = isEditing.value
       ? await updateProxy(payload)
       : await addProxy(payload);
-    if (response?.error) {
-      throw new Error(
-        response.error.message || (isEditing.value ? "编辑代理任务失败" : "新增代理任务失败"),
-      );
-    }
+    assertProxySubmitSuccess(response, fallbackMessage);
     showToast(isEditing.value ? "编辑代理任务成功！" : "新增代理任务成功！");
     router.back();
   } catch (error) {
     console.error("[proxy-form] submit failed:", error);
-    showToast(error?.message || (isEditing.value ? "编辑代理任务失败" : "新增代理任务失败"));
+    showToast(getProxySubmitErrorMessage(error, fallbackMessage));
   } finally {
     submitting.value = false;
   }
@@ -406,5 +447,4 @@ onMounted(async () => {
     }
   }
 }
-
 </style>
