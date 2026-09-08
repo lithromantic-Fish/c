@@ -5,7 +5,7 @@
       <div class="form-card">
         <div class="form-row static-row">
           <span class="label">被代理人</span>
-          <span class="value">张三</span>
+          <span class="value">{{ principal }}</span>
         </div>
         <button class="form-row" type="button" @click="showAgent = true">
           <span class="label">代理人</span>
@@ -73,6 +73,7 @@ import { computed, onActivated, onMounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 import { showToast } from "vant";
 import UserTreePicker from "@/components/UserTreePicker.vue";
+import { getClamcUserDisplayName } from "@/utils/clamcUser";
 import {
   PROXY_SCOPE_ALL,
   PROXY_SCOPE_PARTIAL,
@@ -83,6 +84,7 @@ import {
 } from "@/store/proxy";
 
 const router = useRouter();
+const principal = getClamcUserDisplayName("");
 const draft = reactive({
   agentId: "",
   agentName: "",

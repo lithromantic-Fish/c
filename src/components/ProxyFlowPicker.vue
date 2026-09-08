@@ -37,8 +37,8 @@
 </template>
 
 <script setup>
-import { computed, defineComponent, h, ref, watch } from "vue";
-import { Checkbox, Icon } from "vant";
+import { defineComponent, h, ref, watch } from "vue";
+import { Icon } from "vant";
 
 const props = defineProps({
   show: Boolean,
@@ -53,53 +53,100 @@ watch(
   () => props.show,
   (show) => {
     if (!show) return;
-    selectedCodes.value = [...props.modelValue];
+    selectedCodes.value = normalizeSelectedCodes(props.modelValue);
     openCodes.value = new Set(props.tree.map((node) => node.code));
   },
 );
+
+function collectLeafCodes(node, result = []) {
+  if (!node.children.length) {
+    result.push(node.code);
+    return result;
+  }
+  node.children.forEach((child) => collectLeafCodes(child, result));
+  return result;
+}
+
+function allLeafCodes() {
+  return props.tree.flatMap((node) => collectLeafCodes(node));
+}
+
+function normalizeSelectedCodes(codes = []) {
+  const requested = new Set(codes.map(String));
+  const normalized = new Set();
+
+  function visit(node) {
+    if (requested.has(node.code)) {
+      collectLeafCodes(node).forEach((code) => normalized.add(code));
+    }
+    node.children.forEach(visit);
+  }
+
+  props.tree.forEach(visit);
+  return [...normalized];
+}
 
 function isOpen(node) {
   return node.children.length > 0 && openCodes.value.has(node.code);
 }
 
-function toggleNode(node) {
-  if (!node.children.length) {
-    const next = new Set(selectedCodes.value);
-    if (next.has(node.code)) next.delete(node.code);
-    else next.add(node.code);
-    selectedCodes.value = [...next];
-    return;
-  }
+function toggleOpen(node) {
   const next = new Set(openCodes.value);
   if (next.has(node.code)) next.delete(node.code);
   else next.add(node.code);
   openCodes.value = next;
 }
 
+function isSelected(node) {
+  const leafCodes = collectLeafCodes(node);
+  return leafCodes.length > 0 && leafCodes.every((code) => selectedCodes.value.includes(code));
+}
+
+function toggleSelection(node) {
+  const leafCodes = collectLeafCodes(node);
+  const next = new Set(selectedCodes.value);
+  const shouldSelect = leafCodes.some((code) => !next.has(code));
+  leafCodes.forEach((code) => {
+    if (shouldSelect) next.add(code);
+    else next.delete(code);
+  });
+  selectedCodes.value = [...next];
+}
+
 const FlowRow = defineComponent({
   props: { node: Object, level: Number },
   setup(rowProps) {
-    const selectable = computed(() => !rowProps.node.children.length);
-    return () =>
-      h(
-        "button",
-        {
-          type: "button",
-          class: ["flow-row", `level-${rowProps.level}`],
-          onClick: () => toggleNode(rowProps.node),
-        },
-        [
-          h("span", { class: "flow-name" }, rowProps.node.name),
-          selectable.value
-            ? h(Checkbox, {
-                name: rowProps.node.code,
-                modelValue: selectedCodes.value.includes(rowProps.node.code),
-                "onUpdate:modelValue": () => toggleNode(rowProps.node),
-                onClick: (event) => event.stopPropagation(),
-              })
-            : h(Icon, { name: isOpen(rowProps.node) ? "arrow-up" : "arrow-down" }),
-        ],
-      );
+    return () => {
+      const hasChildren = rowProps.node.children.length > 0;
+      const selected = isSelected(rowProps.node);
+      return h("div", { class: ["flow-row", `level-${rowProps.level}`] }, [
+        hasChildren
+          ? h(
+              "button",
+              {
+                type: "button",
+                class: "expand-button",
+                "aria-label": `${isOpen(rowProps.node) ? "收起" : "展开"}${rowProps.node.name}`,
+                onClick: () => toggleOpen(rowProps.node),
+              },
+              [h(Icon, { name: isOpen(rowProps.node) ? "arrow-up" : "arrow-down" })],
+            )
+          : h("span", { class: "expand-placeholder", "aria-hidden": "true" }),
+        h(
+          "button",
+          {
+            type: "button",
+            class: ["select-button", { selected }],
+            "aria-pressed": String(selected),
+            onClick: () => toggleSelection(rowProps.node),
+          },
+          [
+            h("span", { class: "flow-name" }, rowProps.node.name),
+            selected ? h(Icon, { name: "success", class: "selected-icon" }) : null,
+          ],
+        ),
+      ]);
+    };
   },
 });
 
@@ -108,7 +155,8 @@ function close() {
 }
 
 function confirm() {
-  emit("confirm", [...selectedCodes.value]);
+  const selected = new Set(selectedCodes.value);
+  emit("confirm", allLeafCodes().filter((code) => selected.has(code)));
   close();
 }
 </script>
@@ -163,8 +211,6 @@ function confirm() {
   align-items: center;
   width: 100%;
   height: 48px;
-  padding-right: 16px;
-  border: 0;
   border-bottom: 1px solid #f2f3f5;
   color: #323233;
   background: #fff;
@@ -172,16 +218,48 @@ function confirm() {
   text-align: left;
 
   &.level-1 {
-    padding-left: 16px;
+    padding-left: 8px;
     font-weight: 600;
   }
 
   &.level-2 {
-    padding-left: 36px;
+    padding-left: 28px;
   }
 
   &.level-3 {
-    padding-left: 56px;
+    padding-left: 48px;
+  }
+
+  .expand-button,
+  .expand-placeholder {
+    flex: 0 0 32px;
+    width: 32px;
+    height: 100%;
+  }
+
+  .expand-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    color: #969799;
+    background: transparent;
+  }
+
+  .select-button {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    align-self: stretch;
+    min-width: 0;
+    padding: 0 16px 0 4px;
+    border: 0;
+    color: inherit;
+    background: transparent;
+    font: inherit;
+    font-weight: inherit;
+    text-align: left;
   }
 
   .flow-name {
@@ -193,8 +271,14 @@ function confirm() {
   }
 
   .van-icon {
-    color: #969799;
     font-size: 16px;
+  }
+
+  .selected-icon {
+    flex: 0 0 auto;
+    color: var(--primary);
+    font-size: 18px;
+    font-weight: 600;
   }
 }
 

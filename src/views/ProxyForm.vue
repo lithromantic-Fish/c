@@ -107,11 +107,10 @@ import { showToast } from "vant";
 import { addProxy, updateProxy } from "@/api/proxy";
 import ProxyFlowPicker from "@/components/ProxyFlowPicker.vue";
 import UserTreePicker from "@/components/UserTreePicker.vue";
-import { getStorage } from "@/utils/storage";
+import { getClamcUserDisplayName } from "@/utils/clamcUser";
 import {
   PROXY_SCOPE_ALL,
   PROXY_SCOPE_PARTIAL,
-  assertProxySuccess,
   ensureProxyFlows,
   ensureProxyPeople,
   getProxyRecord,
@@ -126,7 +125,7 @@ const isEditing = computed(() => !!route.query.id);
 const form = reactive({
   id: "",
   objectIds: [],
-  principal: getStorage("clamc_user") || "",
+  principal: getClamcUserDisplayName(""),
   agentId: "",
   agentName: "",
   scope: PROXY_SCOPE_ALL,
@@ -160,7 +159,7 @@ function hydrate() {
       flowCodes: [...record.flowCodes],
     });
   }
-  document.title = record ? "编辑代理" : "新建代理";
+  document.title = "新建代理";
 }
 
 function selectAgent(action) {
@@ -226,12 +225,16 @@ async function submit() {
     const response = isEditing.value
       ? await updateProxy(payload)
       : await addProxy(payload);
-    assertProxySuccess(response, isEditing.value ? "保存代理失败" : "新建代理失败");
-    showToast(isEditing.value ? "保存成功" : "新建成功");
+    if (response?.error) {
+      throw new Error(
+        response.error.message || (isEditing.value ? "编辑代理任务失败" : "新增代理任务失败"),
+      );
+    }
+    showToast(isEditing.value ? "编辑代理任务成功！" : "新增代理任务成功！");
     router.back();
   } catch (error) {
     console.error("[proxy-form] submit failed:", error);
-    showToast(error?.message || (isEditing.value ? "保存代理失败" : "新建代理失败"));
+    showToast(error?.message || (isEditing.value ? "编辑代理任务失败" : "新增代理任务失败"));
   } finally {
     submitting.value = false;
   }
