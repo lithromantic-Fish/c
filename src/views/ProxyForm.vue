@@ -20,22 +20,28 @@
     <section class="form-section">
       <div class="section-title required">流程信息</div>
       <div class="form-card">
-        <button class="form-row" type="button" @click="showScope = true">
+        <button
+          class="form-row"
+          type="button"
+          :disabled="isEditing"
+          @click="showScope = true"
+        >
           <span class="label">代理范围</span>
           <span class="value">{{ scopeLabel }}</span>
-          <van-icon name="arrow" />
+          <van-icon v-if="!isEditing" name="arrow" />
         </button>
         <button
           v-if="form.scope === PROXY_SCOPE_PARTIAL"
           class="form-row"
           type="button"
+          :disabled="isEditing"
           @click="showFlows = true"
         >
           <span class="label">流程名称</span>
           <span class="value ellipsis" :class="{ placeholder: !form.flows.length }">
             {{ flowLabel }}
           </span>
-          <van-icon name="arrow" />
+          <van-icon v-if="!isEditing" name="arrow" />
         </button>
       </div>
     </section>
@@ -91,7 +97,7 @@
       <van-date-picker
         v-model="dateValue"
         title="选择日期"
-        :min-date="new Date(2020, 0, 1)"
+        :min-date="minDate"
         :max-date="new Date(2035, 11, 31)"
         @confirm="confirmDate"
         @cancel="showDate = false"
@@ -141,6 +147,7 @@ const showDate = ref(false);
 const dateField = ref("startDate");
 const dateValue = ref([]);
 const submitting = ref(false);
+const minDate = startOfToday();
 
 const scopeActions = [
   { name: "全部代理", value: PROXY_SCOPE_ALL },
@@ -186,19 +193,41 @@ function confirmFlows(codes) {
 }
 
 function dateArray(value) {
-  if (value) return value.split("-");
-  const now = new Date();
-  return [String(now.getFullYear()), String(now.getMonth() + 1).padStart(2, "0"), String(now.getDate()).padStart(2, "0")];
+  return value.split("-");
+}
+
+function startOfToday() {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return today;
+}
+
+function formatDate(date) {
+  return [
+    String(date.getFullYear()),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
+function currentDateText() {
+  return formatDate(startOfToday());
 }
 
 function openDate(field) {
   dateField.value = field;
-  dateValue.value = dateArray(form[field]);
+  const today = currentDateText();
+  dateValue.value = dateArray(form[field] && form[field] >= today ? form[field] : today);
   showDate.value = true;
 }
 
 function confirmDate({ selectedValues }) {
-  form[dateField.value] = selectedValues.join("-");
+  const selectedDate = selectedValues.join("-");
+  if (selectedDate < currentDateText()) {
+    showToast("代理时间不能早于当前时间");
+    return;
+  }
+  form[dateField.value] = selectedDate;
   showDate.value = false;
 }
 
@@ -207,6 +236,9 @@ async function submit() {
   if (!form.agentName) return showToast("请选择代理人");
   if (form.scope === PROXY_SCOPE_PARTIAL && !form.flowCodes.length) return showToast("请选择代理流程");
   if (!form.startDate || !form.endDate) return showToast("请选择代理时间");
+  const today = currentDateText();
+  if (form.startDate < today) return showToast("开始时间不能早于当前时间");
+  if (form.endDate < today) return showToast("结束时间不能早于当前时间");
   if (form.startDate > form.endDate) return showToast("结束时间不能早于开始时间");
   const payload = {
     agentId: form.agentId,
@@ -304,6 +336,11 @@ onMounted(async () => {
 
   &:last-child {
     border-bottom: 0;
+  }
+
+  &:disabled {
+    color: #323233;
+    opacity: 1;
   }
 
   .label {

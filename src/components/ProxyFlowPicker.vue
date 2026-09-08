@@ -54,7 +54,7 @@ watch(
   (show) => {
     if (!show) return;
     selectedCodes.value = normalizeSelectedCodes(props.modelValue);
-    openCodes.value = new Set(props.tree.map((node) => node.code));
+    openCodes.value = new Set();
   },
 );
 

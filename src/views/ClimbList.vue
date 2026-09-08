@@ -118,10 +118,19 @@
                 <span>代理流程：</span>{{ record.flows.join("、") || "-" }}
               </p>
               <div class="proxy-actions">
-                <button type="button" @click="editProxy(record)">
+                <button
+                  type="button"
+                  :disabled="record.status === 'ended'"
+                  @click="editProxy(record)"
+                >
                   <img :src="proxyEditIcon" alt="" />编辑
                 </button>
-                <button type="button" class="delete" @click="confirmDeleteProxy(record)">
+                <button
+                  type="button"
+                  class="delete"
+                  :disabled="record.status === 'ended'"
+                  @click="confirmDeleteProxy(record)"
+                >
                   <img :src="proxyDeleteIcon" alt="" />删除
                 </button>
               </div>
@@ -866,10 +875,12 @@ function createProxy() {
 }
 
 function editProxy(record) {
+  if (record.status === "ended") return;
   router.push({ path: ROUTES.proxyForm, query: { id: record.id } });
 }
 
 async function confirmDeleteProxy(record) {
+  if (record.status === "ended") return;
   try {
     await showConfirmDialog({
       title: "确定删除该代理吗？",
@@ -1293,6 +1304,12 @@ const onRefresh = async () => {
     background: #f5f5f5;
     font-size: 14px;
     line-height: 20px;
+
+    &:disabled {
+      color: #c8c9cc;
+      cursor: not-allowed;
+      opacity: 0.55;
+    }
   }
 
   img {
