@@ -264,11 +264,9 @@ import {
   appendProxyRecords,
   assertProxySuccess,
   deleteProxyRecord,
-  ensureProxyPeople,
   hasProxyFilter,
   mapProxyRecord,
   proxyFilterState,
-  proxyPeople,
   proxyRecords,
   setProxyRecords,
   unwrapProxyPayload,
@@ -778,20 +776,11 @@ const proxyFinished = ref(false);
 const proxyLoadError = ref(false);
 const proxyRefreshing = ref(false);
 let proxyFetchGeneration = 0;
-function resolveProxyAgentId() {
-  if (proxyFilterState.agentId) return proxyFilterState.agentId;
-  const keyword = proxyKeyword.value.trim();
-  if (!keyword) return "";
-  const exactPerson = proxyPeople.value.find(
-    (item) => item.name === keyword || item.id === keyword,
-  );
-  const fuzzyPerson = proxyPeople.value.find((item) => item.name.includes(keyword));
-  return exactPerson?.id || fuzzyPerson?.id || keyword;
-}
 
 function buildProxyParams(pageNum) {
   return {
-    agentId: resolveProxyAgentId(),
+    agentId: proxyFilterState.agentId || "",
+    agentName: proxyKeyword.value.trim(),
     workFlowCode: proxyFilterState.workflowCode || "",
     pageNum,
     pageSize,
@@ -843,11 +832,6 @@ async function resetProxyAndLoad() {
   proxyFinished.value = false;
   proxyLoadError.value = false;
   proxyLoading.value = true;
-  try {
-    await ensureProxyPeople();
-  } catch (error) {
-    console.error("[proxy-people] load failed:", error);
-  }
   await loadProxyNextPage();
 }
 

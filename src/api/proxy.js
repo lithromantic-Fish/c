@@ -5,6 +5,7 @@ const BASE = "/api/process-center/agency";
 export function fetchProxyList(params = {}) {
   return http.post(`${BASE}/query`, {
     agentId: "",
+    agentName: "",
     workFlowCode: "",
     pageNum: 1,
     pageSize: 10,

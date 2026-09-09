@@ -68,14 +68,21 @@ const keyword = ref("");
 const selectedId = ref("");
 const openDepartments = ref(new Set());
 
+function normalizePersonName(value) {
+  return String(value || "")
+    .normalize("NFKC")
+    .replace(/\s+/g, "")
+    .toLowerCase();
+}
+
 const filteredDepartments = computed(() => {
-  const value = keyword.value.trim().toLowerCase();
+  const value = normalizePersonName(keyword.value);
   if (!value) return props.departments;
   return props.departments
     .map((department) => ({
       ...department,
       users: department.users.filter((user) =>
-        String(user.name || "").toLowerCase().includes(value),
+        normalizePersonName(user.name).includes(value),
       ),
     }))
     .filter((department) => department.users.length);

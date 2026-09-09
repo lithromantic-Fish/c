@@ -271,6 +271,12 @@ function assertProxySubmitSuccess(response, fallbackMessage) {
   }
 }
 
+function hasCreateSuccessMessage(response) {
+  return /新增代理(?:任务)?成功/.test(
+    getProxySubmitErrorMessage(response, ""),
+  );
+}
+
 async function submit() {
   if (submitting.value) return;
   if (!form.agentName) return showToast("请选择代理人");
@@ -302,11 +308,21 @@ async function submit() {
     const response = isEditing.value
       ? await updateProxy(payload)
       : await addProxy(payload);
+    if (!isEditing.value && hasCreateSuccessMessage(response)) {
+      showToast("新增代理成功");
+      router.back();
+      return;
+    }
     assertProxySubmitSuccess(response, fallbackMessage);
-    showToast(isEditing.value ? "编辑代理任务成功！" : "新增代理任务成功！");
+    showToast(isEditing.value ? "编辑代理任务成功！" : "新增代理成功");
     router.back();
   } catch (error) {
     console.error("[proxy-form] submit failed:", error);
+    if (!isEditing.value && hasCreateSuccessMessage(error)) {
+      showToast("新增代理成功");
+      router.back();
+      return;
+    }
     showToast(getProxySubmitErrorMessage(error, fallbackMessage));
   } finally {
     submitting.value = false;
