@@ -19,17 +19,25 @@
           <span class="value">{{ scopeLabel }}</span>
           <van-icon name="arrow" />
         </button>
-        <button class="form-row" type="button" @click="openDate('startDate')">
+        <button
+          class="form-row"
+          type="button"
+          @click="openTimeOptions('startTimeState')"
+        >
           <span class="label">开始日期</span>
-          <span class="value" :class="{ placeholder: !draft.startDate }">
-            {{ draft.startDate || "请选择" }}
+          <span class="value" :class="{ placeholder: !startTimeLabel }">
+            {{ startTimeLabel || "请选择" }}
           </span>
           <van-icon name="arrow" />
         </button>
-        <button class="form-row" type="button" @click="openDate('endDate')">
+        <button
+          class="form-row"
+          type="button"
+          @click="openTimeOptions('endTimeState')"
+        >
           <span class="label">结束日期</span>
-          <span class="value" :class="{ placeholder: !draft.endDate }">
-            {{ draft.endDate || "请选择" }}
+          <span class="value" :class="{ placeholder: !endTimeLabel }">
+            {{ endTimeLabel || "请选择" }}
           </span>
           <van-icon name="arrow" />
         </button>
@@ -55,16 +63,13 @@
       teleport=".app-frame"
       @select="selectScope"
     />
-    <van-popup v-model:show="showDate" position="bottom" round teleport=".app-frame">
-      <van-date-picker
-        v-model="dateValue"
-        title="选择日期"
-        :min-date="new Date(2020, 0, 1)"
-        :max-date="new Date(2035, 11, 31)"
-        @confirm="confirmDate"
-        @cancel="showDate = false"
-      />
-    </van-popup>
+    <van-action-sheet
+      v-model:show="showTimeOptions"
+      :title="timeOptionsTitle"
+      :actions="proxyTimeOptions"
+      teleport=".app-frame"
+      @select="selectTimeOption"
+    />
   </div>
 </template>
 
@@ -78,8 +83,10 @@ import {
   PROXY_SCOPE_ALL,
   PROXY_SCOPE_PARTIAL,
   ensureProxyPeople,
+  ensureProxyTimeOptions,
   proxyDepartmentTree,
   proxyFilterState,
+  proxyTimeOptions,
   resetProxyFilter,
 } from "@/store/proxy";
 
@@ -91,14 +98,13 @@ const draft = reactive({
   scope: "",
   workflowCode: "",
   workflowName: "",
-  startDate: "",
-  endDate: "",
+  startTimeState: "",
+  endTimeState: "",
 });
 const showAgent = ref(false);
 const showScope = ref(false);
-const showDate = ref(false);
-const dateField = ref("startDate");
-const dateValue = ref([]);
+const showTimeOptions = ref(false);
+const timeStateField = ref("startTimeState");
 
 const scopeActions = [
   { name: "全部代理", value: PROXY_SCOPE_ALL },
@@ -109,6 +115,11 @@ const scopeLabel = computed(() => {
   if (draft.scope === PROXY_SCOPE_ALL) return "全部代理";
   return "全部代理";
 });
+const startTimeLabel = computed(() => timeStateLabel(draft.startTimeState));
+const endTimeLabel = computed(() => timeStateLabel(draft.endTimeState));
+const timeOptionsTitle = computed(() =>
+  timeStateField.value === "startTimeState" ? "选择开始日期" : "选择结束日期",
+);
 
 function hydrate() {
   Object.assign(draft, proxyFilterState);
@@ -126,21 +137,21 @@ function selectScope(action) {
   showScope.value = false;
 }
 
-function dateArray(value) {
-  if (value) return value.split("-");
-  const now = new Date();
-  return [String(now.getFullYear()), String(now.getMonth() + 1).padStart(2, "0"), String(now.getDate()).padStart(2, "0")];
+function timeStateLabel(value) {
+  const option = proxyTimeOptions.value.find(
+    (item) => String(item.value) === String(value),
+  );
+  return option?.name || "";
 }
 
-function openDate(field) {
-  dateField.value = field;
-  dateValue.value = dateArray(draft[field]);
-  showDate.value = true;
+function openTimeOptions(field) {
+  timeStateField.value = field;
+  showTimeOptions.value = true;
 }
 
-function confirmDate({ selectedValues }) {
-  draft[dateField.value] = selectedValues.join("-");
-  showDate.value = false;
+function selectTimeOption(action) {
+  draft[timeStateField.value] = action.value;
+  showTimeOptions.value = false;
 }
 
 function reset() {
@@ -157,12 +168,16 @@ function confirm() {
 
 async function initialize() {
   hydrate();
-  try {
-    await ensureProxyPeople();
-  } catch (error) {
-    console.error("[proxy-filter] people load failed:", error);
-    showToast(error?.message || "获取代理人失败");
-  }
+  await Promise.all([
+    ensureProxyPeople().catch((error) => {
+      console.error("[proxy-filter] people load failed:", error);
+      showToast(error?.message || "获取代理人失败");
+    }),
+    ensureProxyTimeOptions().catch((error) => {
+      console.error("[proxy-filter] time options load failed:", error);
+      showToast(error?.message || "获取时间筛选选项失败");
+    }),
+  ]);
 }
 
 onMounted(initialize);

@@ -5,8 +5,7 @@ const BASE = "/api/process-center/agency";
 export function fetchProxyList(params = {}) {
   return http.post(`${BASE}/query`, {
     agentId: "",
-    agentName: "",
-    workFlowCode: "",
+    workflowCode: "",
     pageNum: 1,
     pageSize: 10,
     startTimeState: "",
@@ -33,4 +32,8 @@ export function removeProxies(objectIds) {
 
 export function fetchProxyWorkflows() {
   return http.get(`${BASE}/queryWorkFlow`);
+}
+
+export function fetchProxyTimeOptions() {
+  return http.get("/api/process-center/dataDictionary/query");
 }

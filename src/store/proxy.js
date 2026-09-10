@@ -1,6 +1,6 @@
 import { reactive, ref } from "vue";
 import { fetchDeptTree } from "@/api/process";
-import { fetchProxyWorkflows } from "@/api/proxy";
+import { fetchProxyTimeOptions, fetchProxyWorkflows } from "@/api/proxy";
 
 export const PROXY_SCOPE_ALL = "all";
 export const PROXY_SCOPE_PARTIAL = "partial";
@@ -9,6 +9,7 @@ export const proxyPeople = ref([]);
 export const proxyDepartmentTree = ref([]);
 export const proxyFlowOptions = ref([]);
 export const proxyFlowTree = ref([]);
+export const proxyTimeOptions = ref([]);
 export const proxyRecords = ref([]);
 
 export const proxyFilterState = reactive({
@@ -17,12 +18,14 @@ export const proxyFilterState = reactive({
   scope: "",
   workflowCode: "",
   workflowName: "",
-  startDate: "",
-  endDate: "",
+  startTimeState: "",
+  endTimeState: "",
 });
 
 export function hasProxyFilter() {
-  return Object.values(proxyFilterState).some((value) => String(value || "").trim());
+  return Object.values(proxyFilterState).some(
+    (value) => value != null && value !== "" && String(value).trim(),
+  );
 }
 
 function splitValues(value) {
@@ -35,10 +38,12 @@ function splitValues(value) {
 
 export function unwrapProxyPayload(response) {
   if (response == null || typeof response !== "object") return response;
-  if (Array.isArray(response) || "rows" in response || "total" in response) return response;
+  if (Array.isArray(response) || "rows" in response || "total" in response)
+    return response;
   const inner = response.data;
   if (inner && typeof inner === "object") {
-    if (Array.isArray(inner) || "rows" in inner || "total" in inner) return inner;
+    if (Array.isArray(inner) || "rows" in inner || "total" in inner)
+      return inner;
     if (inner.data != null) return inner.data;
   }
   return inner ?? response;
@@ -55,13 +60,13 @@ export function assertProxySuccess(response, fallbackMessage) {
 export function mapProxyRecord(row = {}, index = 0) {
   const isAll = Number(row.isAllWorkflow) === 999;
   const objectIds = splitValues(row.objectIds || row.objectId);
-  const flowCodes = splitValues(
-    row.workFlowCodes || row.workflowCodes || row.workFlowCode || row.workflowCode,
-  );
+  const flowCodes = splitValues(row.workflowCode);
   const flows = isAll ? [] : splitValues(row.workflowName || row.workFlowName);
   const statusText = String(row.status || "");
   return {
-    id: objectIds[0] || String(row.sortBy || `${row.agentId || "proxy"}-${index}`),
+    id:
+      objectIds[0] ||
+      String(row.sortBy || `${row.agentId || "proxy"}-${index}`),
     objectIds,
     principal: row.userName || row.originatorName || "",
     principalId: row.userId || row.originator || "",
@@ -90,26 +95,30 @@ export function appendProxyRecords(records) {
 export function setProxyPeople(tree = []) {
   const people = [];
   const seen = new Set();
-  proxyDepartmentTree.value = tree.map((dept) => {
-    const users = (dept.userBooks || dept.users || []).map((user) => {
-      const id = String(user.usercode || user.userCode || user.id || "");
-      const name = user.username || user.userName || user.name || "";
-      const person = {
-        id,
-        name,
-        deptName: dept.deptName || dept.name || "",
+  proxyDepartmentTree.value = tree
+    .map((dept) => {
+      const users = (dept.userBooks || dept.users || [])
+        .map((user) => {
+          const id = String(user.usercode || user.userCode || user.id || "");
+          const name = user.username || user.userName || user.name || "";
+          const person = {
+            id,
+            name,
+            deptName: dept.deptName || dept.name || "",
+          };
+          if (id && name && !seen.has(id)) {
+            seen.add(id);
+            people.push(person);
+          }
+          return person;
+        })
+        .filter((person) => person.id && person.name);
+      return {
+        name: dept.deptName || dept.name || "",
+        users,
       };
-      if (id && name && !seen.has(id)) {
-        seen.add(id);
-        people.push(person);
-      }
-      return person;
-    }).filter((person) => person.id && person.name);
-    return {
-      name: dept.deptName || dept.name || "",
-      users,
-    };
-  }).filter((dept) => dept.name && dept.users.length);
+    })
+    .filter((dept) => dept.name && dept.users.length);
   proxyDepartmentTree.value.forEach((dept) => {
     dept.users.forEach((person) => {
       if (!seen.has(person.id)) {
@@ -138,18 +147,8 @@ export async function ensureProxyPeople() {
 
 function normalizeWorkflowNode(item, depth = 1) {
   if (!item || typeof item !== "object" || depth > 3) return null;
-  const code =
-    item.processClassificationCode ||
-    item.workflowCode ||
-    item.workFlowCode ||
-    item.code ||
-    item.value;
-  const name =
-    item.processClassificationName ||
-    item.workflowName ||
-    item.workFlowName ||
-    item.name ||
-    item.text;
+  const code = item.processClassificationCode || item.workflowCode;
+  const name = item.processClassificationName || item.workflowName;
   const children = (item.children || item.childList || [])
     .map((child) => normalizeWorkflowNode(child, depth + 1))
     .filter(Boolean);
@@ -171,11 +170,13 @@ export function setProxyFlowOptions(payload) {
     .map((item) => normalizeWorkflowNode(item))
     .filter(Boolean);
   const seen = new Set();
-  proxyFlowOptions.value = collectSelectableFlows(proxyFlowTree.value).filter((flow) => {
-    if (seen.has(flow.code)) return false;
-    seen.add(flow.code);
-    return true;
-  });
+  proxyFlowOptions.value = collectSelectableFlows(proxyFlowTree.value).filter(
+    (flow) => {
+      if (seen.has(flow.code)) return false;
+      seen.add(flow.code);
+      return true;
+    },
+  );
   return proxyFlowOptions.value;
 }
 
@@ -196,6 +197,30 @@ export async function ensureProxyFlows() {
   return proxyFlowsPromise;
 }
 
+let proxyTimeOptionsPromise = null;
+
+export async function ensureProxyTimeOptions() {
+  if (proxyTimeOptions.value.length) return proxyTimeOptions.value;
+  if (!proxyTimeOptionsPromise) {
+    proxyTimeOptionsPromise = fetchProxyTimeOptions()
+      .then((response) => {
+        assertProxySuccess(response, "获取时间筛选选项失败");
+        const payload = unwrapProxyPayload(response);
+        proxyTimeOptions.value = (Array.isArray(payload) ? payload : [])
+          .map((item) => ({
+            name: String(item?.label || item?.name || ""),
+            value: item?.value,
+          }))
+          .filter((item) => item.name && item.value != null);
+        return proxyTimeOptions.value;
+      })
+      .finally(() => {
+        proxyTimeOptionsPromise = null;
+      });
+  }
+  return proxyTimeOptionsPromise;
+}
+
 export function getProxyRecord(id) {
   return proxyRecords.value.find((record) => record.id === id) || null;
 }
@@ -213,6 +238,6 @@ export function resetProxyFilter() {
   proxyFilterState.scope = "";
   proxyFilterState.workflowCode = "";
   proxyFilterState.workflowName = "";
-  proxyFilterState.startDate = "";
-  proxyFilterState.endDate = "";
+  proxyFilterState.startTimeState = "";
+  proxyFilterState.endTimeState = "";
 }

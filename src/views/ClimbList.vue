@@ -26,6 +26,8 @@
               v-model="proxyKeyword"
               class="s-input"
               placeholder="搜索代理人"
+              @focus="proxySearchFocused = true"
+              @blur="proxySearchFocused = false"
             />
             <img
               v-if="proxyKeyword"
@@ -139,7 +141,7 @@
           <div v-else class="proxy-empty">暂无符合条件的代理</div>
         </van-pull-refresh>
       </div>
-      <div class="proxy-add-footer">
+      <div v-show="!proxySearchFocused" class="proxy-add-footer">
         <button type="button" @click="createProxy">
           <img :src="proxyAddIcon" alt="" />新建代理
         </button>
@@ -264,9 +266,11 @@ import {
   appendProxyRecords,
   assertProxySuccess,
   deleteProxyRecord,
+  ensureProxyPeople,
   hasProxyFilter,
   mapProxyRecord,
   proxyFilterState,
+  proxyPeople,
   proxyRecords,
   setProxyRecords,
   unwrapProxyPayload,
@@ -764,6 +768,7 @@ const goFilter = () => {
 };
 
 const proxyKeyword = ref("");
+const proxySearchFocused = ref(false);
 const proxyFilterActive = computed(() => hasProxyFilter());
 const visibleProxyRecords = computed(() => {
   if (!proxyFilterState.scope) return proxyRecords.value;
@@ -777,19 +782,38 @@ const proxyLoadError = ref(false);
 const proxyRefreshing = ref(false);
 let proxyFetchGeneration = 0;
 
+function normalizeProxyPerson(value) {
+  return String(value || "")
+    .normalize("NFKC")
+    .replace(/\s+/g, "")
+    .toLowerCase();
+}
+
+function resolveProxyAgentId() {
+  const rawKeyword = proxyKeyword.value.trim();
+  const keyword = normalizeProxyPerson(rawKeyword);
+  if (!keyword) return proxyFilterState.agentId || "";
+  const person =
+    proxyPeople.value.find((item) => normalizeProxyPerson(item.id) === keyword) ||
+    proxyPeople.value.find((item) => normalizeProxyPerson(item.name) === keyword) ||
+    proxyPeople.value.find((item) =>
+      normalizeProxyPerson(item.name).includes(keyword),
+    );
+  return person?.id || rawKeyword;
+}
+
 function buildProxyParams(pageNum) {
   return {
-    agentId: proxyFilterState.agentId || "",
-    agentName: proxyKeyword.value.trim(),
-    workFlowCode: proxyFilterState.workflowCode || "",
+    agentId: resolveProxyAgentId(),
+    workflowCode: proxyFilterState.workflowCode || "",
     pageNum,
     pageSize,
-    startTimeState: "",
-    startTimeBegin: proxyFilterState.startDate || "",
+    startTimeState: proxyFilterState.startTimeState,
+    startTimeBegin: "",
     startTime: "",
-    endTimeState: "",
+    endTimeState: proxyFilterState.endTimeState,
     endTimeBegin: "",
-    endTime: proxyFilterState.endDate || "",
+    endTime: "",
   };
 }
 
@@ -825,13 +849,19 @@ async function loadProxyNextPage() {
 }
 
 async function resetProxyAndLoad() {
-  proxyFetchGeneration += 1;
+  const generation = ++proxyFetchGeneration;
   setProxyRecords([]);
   proxyPage.value = 0;
   proxyTotal.value = 0;
   proxyFinished.value = false;
   proxyLoadError.value = false;
   proxyLoading.value = true;
+  try {
+    await ensureProxyPeople();
+  } catch (error) {
+    console.error("[proxy-people] load failed:", error);
+  }
+  if (generation !== proxyFetchGeneration) return;
   await loadProxyNextPage();
 }
 
