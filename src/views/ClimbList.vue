@@ -1,5 +1,5 @@
 <template>
-  <div class="climb">
+  <div class="climb" :style="isProxyTab ? proxyViewportStyle : undefined">
     <div class="sticky-header">
       <van-tabs
         ref="tabsRef"
@@ -26,8 +26,6 @@
               v-model="proxyKeyword"
               class="s-input"
               placeholder="搜索代理人"
-              @focus="proxySearchFocused = true"
-              @blur="proxySearchFocused = false"
             />
             <img
               v-if="proxyKeyword"
@@ -141,7 +139,7 @@
           <div v-else class="proxy-empty">暂无符合条件的代理</div>
         </van-pull-refresh>
       </div>
-      <div v-show="!proxySearchFocused" class="proxy-add-footer">
+      <div class="proxy-add-footer">
         <button type="button" @click="createProxy">
           <img :src="proxyAddIcon" alt="" />新建代理
         </button>
@@ -237,7 +235,15 @@
 </template>
 
 <script setup>
-import { ref, computed, nextTick, watch, onMounted, onActivated } from "vue";
+import {
+  ref,
+  computed,
+  nextTick,
+  watch,
+  onMounted,
+  onActivated,
+  onUnmounted,
+} from "vue";
 import { useRouter } from "vue-router";
 import FlowItem from "@/components/FlowItem.vue";
 import {
@@ -316,9 +322,24 @@ const tabs = computed(() => [
 ]);
 const activeTab = ref(initialListTab());
 const isProxyTab = computed(() => activeTab.value === "proxy");
+const proxyViewportHeight = ref(window.innerHeight);
+const proxyViewportStyle = computed(() => ({
+  height: `${proxyViewportHeight.value}px`,
+}));
 const tabLabel = computed(
   () => tabs.value.find((t) => t.key === activeTab.value)?.label || "",
 );
+
+let orientationTimer = 0;
+
+function captureProxyViewportHeight() {
+  proxyViewportHeight.value = window.innerHeight;
+}
+
+function onOrientationChange() {
+  window.clearTimeout(orientationTimer);
+  orientationTimer = window.setTimeout(captureProxyViewportHeight, 300);
+}
 
 const ALL = {
   name: "全部分类",
@@ -660,6 +681,7 @@ watch(activeTab, async (tab) => {
   searching.value = false;
   keyword.value = "";
   if (tab === "proxy") {
+    captureProxyViewportHeight();
     await resetProxyAndLoad();
     resizeTabsLine();
     return;
@@ -700,6 +722,8 @@ watch(
 );
 
 onMounted(async () => {
+  captureProxyViewportHeight();
+  window.addEventListener("orientationchange", onOrientationChange);
   syncPageTitle();
   if (resumePendingPcenterOpen()) return;
   if (isProxyTab.value) {
@@ -717,6 +741,7 @@ onMounted(async () => {
 /** keep-alive 下首屏会依次触发 onMounted（异步未完成）与 onActivated，二者都调 load 会并发请求同一页并追加两次 */
 const skipNextActivatedLoad = ref(true);
 onActivated(async () => {
+  if (isProxyTab.value) captureProxyViewportHeight();
   syncPageTitle();
   if (resumePendingPcenterOpen()) return;
   if (skipNextActivatedLoad.value) {
@@ -731,6 +756,10 @@ onActivated(async () => {
   syncCategoryFromFilterState();
   resetAndLoad();
   void refreshTabCounts();
+});
+onUnmounted(() => {
+  window.clearTimeout(orientationTimer);
+  window.removeEventListener("orientationchange", onOrientationChange);
 });
 
 const searching = ref(false);
@@ -768,7 +797,6 @@ const goFilter = () => {
 };
 
 const proxyKeyword = ref("");
-const proxySearchFocused = ref(false);
 const proxyFilterActive = computed(() => hasProxyFilter());
 const visibleProxyRecords = computed(() => {
   if (!proxyFilterState.scope) return proxyRecords.value;
