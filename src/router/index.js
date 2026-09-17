@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from "vue-router";
 import {
   getAuthTokenByCode,
   getPcenterTokenByCode,
+  redirectToQywxOAuth,
 } from "@/utils/authRedirect";
 import { setAuthCodeHandling } from "@/utils/oauth";
 import { ROUTES, PAGE_BASE } from "@/constants/routes";
@@ -30,10 +31,6 @@ const ENTRY_ROUTE_MAP = {
   ProxyForm: ROUTES.proxyForm,
   Nosupported: ROUTES.nosupported,
 };
-
-function isAuthDebugEnabled(query = {}) {
-  return firstQueryValue(query.debugAuth) === "1";
-}
 
 // vue-router query 可能是 string 或 string[]，这里统一取第一个值。
 function firstQueryValue(value) {
@@ -119,30 +116,62 @@ function consumeAuthReturnLocation() {
   }
 }
 
+// 再次 OAuth 的返回地址：保留业务 query，去掉一次性认证参数。
+function getCleanRouteFullPath(to) {
+  const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+  const url = new URL(`${base}${to.path}`, window.location.origin);
+  Object.entries(to.query).forEach(([key, value]) => {
+    if (value == null) return;
+    const list = Array.isArray(value) ? value : [value];
+    list.forEach((item) => url.searchParams.append(key, String(item)));
+  });
+  url.searchParams.delete("code");
+  url.searchParams.delete("_authHandled");
+  url.searchParams.delete("_authCode");
+  url.searchParams.delete("_authStage");
+  url.searchParams.delete("state");
+  url.hash = to.hash || "";
+  return `${url.pathname}${url.search}${url.hash}`;
+}
+
+function setDocumentTitle(title) {
+  if (!title) return;
+  document.title = title;
+}
+
+// iOS 企微 WebView 回到前台后会丢标题，重新按当前路由补一次。
+function syncCurrentRouteTitle() {
+  setDocumentTitle(router.currentRoute.value?.meta?.title);
+}
+
 /**
  * 企微从应用入口打开时，code 在业务页 URL 上（如 mobileApproval?code=xxx）。
  * 只在 URL 带 code 时换 token；不主动发起 OAuth，避免线上入口来回跳转。
  */
 router.beforeEach(async (to) => {
+  setDocumentTitle(to.meta?.title);
   if (to.meta?.public) return true;
 
-  // 没有企微 code 时，只处理入口 path 跳转。
   const code =
     to.query.code != null && String(to.query.code) !== ""
       ? String(to.query.code)
       : "";
   const entryRouteRedirect = resolveEntryRouteRedirect(to);
+  console.log('entryRouteRedirect',entryRouteRedirect);
+
   if (!code) {
     if (entryRouteRedirect) return entryRouteRedirect;
     return true;
   }
 
-  // pcenter 回调通过 _authStage/state/sessionStorage 判断；否则按主系统登录处理。
   const queryStage = String(to.query._authStage || "");
+  console.log('queryStage',queryStage);
+
   const stateStage =
     String(to.query.state || "") === AUTH_STAGE_PCENTER
       ? AUTH_STAGE_PCENTER
       : "";
+
   const authStage =
     queryStage || stateStage || sessionStorage.getItem(AUTH_STAGE_KEY) || "";
   console.log("[router-auth] code callback", {
@@ -153,7 +182,6 @@ router.beforeEach(async (to) => {
     authStage,
   });
 
-  // 避免同一个 code 因 replace 后再次进入守卫时重复换 token。
   if (
     to.query._authHandled === "1" &&
     to.query._authCode === code &&
@@ -171,7 +199,6 @@ router.beforeEach(async (to) => {
   };
   setAuthCodeHandling(true);
   try {
-    // 第二阶段：换取 pcenter token，完成后恢复返回地址或处理入口 path。
     if (authStage === AUTH_STAGE_PCENTER) {
       await getPcenterTokenByCode(code);
       sessionStorage.removeItem(AUTH_STAGE_KEY);
@@ -185,14 +212,22 @@ router.beforeEach(async (to) => {
       return resolveCleanRouteLocation(to, nextQuery);
     }
 
-    // 第一阶段：只换取主系统 auth_token；pcenter OAuth 延迟到点击业务单据时触发。
-    await getAuthTokenByCode(code);
-    sessionStorage.removeItem(AUTH_ERROR_KEY);
-    delete nextQuery.code;
-    delete nextQuery._authCode;
-    delete nextQuery._authStage;
-    delete nextQuery.state;
-    return resolveCleanRouteLocation(to, nextQuery);
+    await getAuthTokenByCode(code)
+
+    // 主 token 成功后，准备进入 pcenter 认证阶段
+    sessionStorage.removeItem(AUTH_ERROR_KEY)
+    sessionStorage.setItem(
+      AUTH_STAGE_KEY,
+      AUTH_STAGE_PCENTER
+    )
+
+    // 再次 OAuth，获得用于 pcenter 的新 code
+    redirectToQywxOAuth(getCleanRouteFullPath(to), {
+      state: AUTH_STAGE_PCENTER,
+    })
+
+    return false
+
   } catch (e) {
     console.error("[router] code 换 token 失败", e?.message || e, e);
     sessionStorage.setItem(
@@ -207,11 +242,6 @@ router.beforeEach(async (to) => {
     setAuthCodeHandling(false);
   }
 
-  // 换 token 失败时也清掉 URL 上的一次性 code，避免刷新后反复重试。
-  if (isAuthDebugEnabled(to.query)) {
-    console.warn("[router-auth] debugAuth=1, keep current URL after auth error");
-    return true;
-  }
   try {
     const returnLocation = consumeAuthReturnLocation();
     if (returnLocation) return returnLocation;
@@ -225,12 +255,17 @@ router.beforeEach(async (to) => {
   return resolveCleanRouteLocation(to, nextQuery);
 });
 
-// 路由标题只做一次普通设置，复杂 WebView 兜底逻辑已移除。
 router.afterEach((to) => {
-  if (to.meta?.title) {
-    document.title = to.meta.title;
-  }
+  setDocumentTitle(to.meta?.title);
 });
+
+if (typeof window !== "undefined") {
+  window.addEventListener("pageshow", syncCurrentRouteTitle);
+  window.addEventListener("focus", syncCurrentRouteTitle);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) syncCurrentRouteTitle();
+  });
+}
 
 export default router;
 export { PAGE_BASE, ROUTES };
