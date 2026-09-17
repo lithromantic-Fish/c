@@ -2,7 +2,12 @@ import axios from "axios";
 import Cookie from "js-cookie";
 import { showToast } from "vant";
 import { getAppConfig } from "@/config/runtime";
-import { goToLogin } from "@/utils/authRedirect";
+import { goToLogin, redirectToQywxOAuth } from "@/utils/authRedirect";
+
+const PCENTER_TOKEN_KEY = "pc_token";
+const AUTH_STAGE_KEY = "wf_auth_stage";
+const AUTH_STAGE_PCENTER = "pcenter";
+const PENDING_OPEN_KEY = "wf_pending_open";
 
 export function getQueryString(name, url) {
   if (!url) return null;
@@ -47,6 +52,58 @@ function unwrapRedirectData(res) {
   }
 
   return data;
+}
+
+function getCleanCurrentPath() {
+  const url = new URL(window.location.href);
+  url.searchParams.delete("code");
+  url.searchParams.delete("_authHandled");
+  url.searchParams.delete("_authCode");
+  url.searchParams.delete("_authStage");
+  url.searchParams.delete("state");
+  return `${url.pathname}${url.search}${url.hash}`;
+}
+
+function hasPcenterToken() {
+  return !!sessionStorage.getItem(PCENTER_TOKEN_KEY);
+}
+
+/**
+ * 详情页自带认证，先换 pcenter token 再请求跳转地址。
+ * 用 replace 跳授权页，授权页不会留在历史里，详情页返回时直接回到列表页。
+ */
+function requestPcenterAuthBeforeOpen(params, paramUrl) {
+  const sourcePath = getCleanCurrentPath();
+  sessionStorage.setItem(
+    PENDING_OPEN_KEY,
+    JSON.stringify({ params, paramUrl, sourcePath }),
+  );
+  sessionStorage.setItem(AUTH_STAGE_KEY, AUTH_STAGE_PCENTER);
+  redirectToQywxOAuth(sourcePath, {
+    redirectQuery: { _authStage: AUTH_STAGE_PCENTER },
+    state: AUTH_STAGE_PCENTER,
+  });
+}
+
+/** 授权回来后继续被中断的那次点击：补齐历史条目再请求详情页地址。 */
+export async function resumePendingOpen() {
+  if (!hasPcenterToken()) return false;
+  const saved = sessionStorage.getItem(PENDING_OPEN_KEY);
+  if (!saved) return false;
+  sessionStorage.removeItem(PENDING_OPEN_KEY);
+
+  try {
+    const payload = JSON.parse(saved);
+    // 把回调残留的 code 从当前历史条目上抹掉，返回时看到的是干净的列表页。
+    if (payload.sourcePath) {
+      window.history.replaceState(null, "", payload.sourcePath);
+    }
+    await requestUrlGet(payload.params, payload.paramUrl);
+    return true;
+  } catch (e) {
+    console.error("[workflowOpen] resume pending open failed:", e);
+    return false;
+  }
 }
 
 function openRedirectUrl(data, params) {
@@ -171,6 +228,12 @@ export async function toDeal(formUrl, id) {
       instanceId,
       token,
     };
+
+    // 详情页自带认证：没有 pcenter token 就先去授权，回来后由 resumePendingOpen 续上。
+    if (!hasPcenterToken()) {
+      requestPcenterAuthBeforeOpen(params, paramUrl);
+      return;
+    }
 
     await requestUrlGet(params, paramUrl);
     return;

@@ -99,6 +99,34 @@ export function redirectToQywxOAuth(returnPath, options = {}) {
   window.location.replace(loginUrl);
 }
 
+/** 详情页自带认证，需要 pcenter 的 token（写 cookie 供跨应用页面读取）。 */
+export const getPcenterTokenByCode = async (code) => {
+  const cfg = getAppConfig();
+  const prefix = cfg.prefix || "";
+  const url = `${prefix}/api/wxUserInfo`;
+
+  try {
+    const { data } = await axios.get(url, {
+      params: { code, state: "STATE" },
+      timeout: 15000,
+    });
+
+    if (data?.code == 200 && data?.data?.userToken) {
+      const token = data.data.userToken;
+      Cookie.set("token", token);
+      sessionStorage.setItem("pc_token", token);
+      return token;
+    }
+
+    const bizErr = new Error(data?.message || "获取 pcenter token 失败");
+    bizErr.response = { data, status: 200, config: { url } };
+    throw bizErr;
+  } catch (e) {
+    console.error("[pcenter-auth] failed", e?.message || e, e?.response?.data || e);
+    throw e;
+  }
+};
+
 export const getAuthTokenByCode = async (code) => {
   const { corpId, agentId, secret: qywxSecret, sm4Key } = getCorpInfo();
   const paramStr = `${corpId}￥${qywxSecret}￥${agentId}`;

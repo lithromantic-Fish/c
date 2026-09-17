@@ -1,5 +1,8 @@
 import { createRouter, createWebHistory } from "vue-router";
-import { getAuthTokenByCode } from "@/utils/authRedirect";
+import {
+  getAuthTokenByCode,
+  getPcenterTokenByCode,
+} from "@/utils/authRedirect";
 import { setAuthCodeHandling } from "@/utils/oauth";
 import { ROUTES, PAGE_BASE } from "@/constants/routes";
 import routes from "./routes";
@@ -12,7 +15,9 @@ const router = createRouter({
 
 // OAuth 过程中的临时状态 key。
 const RETURN_URL_KEY = "wf_return_url";
+const AUTH_STAGE_KEY = "wf_auth_stage";
 const AUTH_ERROR_KEY = "wf_auth_error";
+const AUTH_STAGE_PCENTER = "pcenter";
 
 // 后端入口只通过 path 传确定的页面名称，例如 ?path=climbProcess。
 const ENTRY_ROUTE_QUERY_KEY = "path";
@@ -90,6 +95,7 @@ function consumeAuthReturnLocation() {
     url.searchParams.delete("code");
     url.searchParams.delete("_authHandled");
     url.searchParams.delete("_authCode");
+    url.searchParams.delete("_authStage");
     url.searchParams.delete("state");
 
     const query = {};
@@ -137,8 +143,21 @@ router.beforeEach(async (to) => {
     return true;
   }
 
+  // pcenter 回调通过 _authStage/state/sessionStorage 判断；否则按主系统登录处理。
+  const authStage =
+    String(to.query._authStage || "") ||
+    (String(to.query.state || "") === AUTH_STAGE_PCENTER
+      ? AUTH_STAGE_PCENTER
+      : "") ||
+    sessionStorage.getItem(AUTH_STAGE_KEY) ||
+    "";
+
   // 避免同一个 code 因 replace 后再次进入守卫时重复换 token。
-  if (to.query._authHandled === "1" && to.query._authCode === code) {
+  if (
+    to.query._authHandled === "1" &&
+    to.query._authCode === code &&
+    String(to.query._authStage || "") === authStage
+  ) {
     if (entryRouteRedirect) return entryRouteRedirect;
     return true;
   }
@@ -147,15 +166,23 @@ router.beforeEach(async (to) => {
     ...to.query,
     _authHandled: "1",
     _authCode: code,
+    _authStage: authStage,
   };
   setAuthCodeHandling(true);
   try {
-    await getAuthTokenByCode(code);
+    // 点击单据时按需触发的第二阶段：换 pcenter token 供详情页自带的认证使用。
+    if (authStage === AUTH_STAGE_PCENTER) {
+      await getPcenterTokenByCode(code);
+      sessionStorage.removeItem(AUTH_STAGE_KEY);
+    } else {
+      await getAuthTokenByCode(code);
+    }
     sessionStorage.removeItem(AUTH_ERROR_KEY);
     const returnLocation = consumeAuthReturnLocation();
     if (returnLocation) return returnLocation;
     delete nextQuery.code;
     delete nextQuery._authCode;
+    delete nextQuery._authStage;
     delete nextQuery.state;
     return resolveCleanRouteLocation(to, nextQuery);
   } catch (e) {
@@ -176,6 +203,7 @@ router.beforeEach(async (to) => {
     if (returnLocation) return returnLocation;
     delete nextQuery.code;
     delete nextQuery._authCode;
+    delete nextQuery._authStage;
     delete nextQuery.state;
   } catch {
     // ignore
