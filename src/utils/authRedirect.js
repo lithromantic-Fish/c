@@ -99,43 +99,6 @@ export function redirectToQywxOAuth(returnPath, options = {}) {
   window.location.replace(loginUrl);
 }
 
-export const getPcenterTokenByCode = async (code) => {
-  const cfg = getAppConfig();
-  const prefix = cfg.prefix || "";
-  const url = `${prefix}/api/wxUserInfo`;
-  console.log("[pcenter-auth] request", {
-    url,
-    codeLen: String(code).length,
-    prefix,
-  });
-
-  try {
-    const { data } = await axios.get(url, {
-      params: { code, state: "STATE" },
-      timeout: 15000,
-    });
-    console.log("[pcenter-auth] response", {
-      code: data?.code,
-      message: data?.message,
-      hasToken: !!data?.data?.userToken,
-    });
-
-    if (data?.code == 200 && data?.data?.userToken) {
-      const token = data.data.userToken;
-      Cookie.set("token", token);
-      sessionStorage.setItem("pc_token", token);
-      return token;
-    }
-
-    const bizErr = new Error(data?.message || "获取 pcenter token 失败");
-    bizErr.response = { data, status: 200, config: { url } };
-    throw bizErr;
-  } catch (e) {
-    console.error("[pcenter-auth] failed", e?.message || e, e?.response?.data || e);
-    throw e;
-  }
-};
-
 export const getAuthTokenByCode = async (code) => {
   const { corpId, agentId, secret: qywxSecret, sm4Key } = getCorpInfo();
   const paramStr = `${corpId}￥${qywxSecret}￥${agentId}`;

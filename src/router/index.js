@@ -1,9 +1,5 @@
 import { createRouter, createWebHistory } from "vue-router";
-import {
-  getAuthTokenByCode,
-  getPcenterTokenByCode,
-  redirectToQywxOAuth,
-} from "@/utils/authRedirect";
+import { getAuthTokenByCode } from "@/utils/authRedirect";
 import { setAuthCodeHandling } from "@/utils/oauth";
 import { ROUTES, PAGE_BASE } from "@/constants/routes";
 import routes from "./routes";
@@ -16,9 +12,7 @@ const router = createRouter({
 
 // OAuth 过程中的临时状态 key。
 const RETURN_URL_KEY = "wf_return_url";
-const AUTH_STAGE_KEY = "wf_auth_stage";
 const AUTH_ERROR_KEY = "wf_auth_error";
-const AUTH_STAGE_PCENTER = "pcenter";
 
 // 后端入口只通过 path 传确定的页面名称，例如 ?path=climbProcess。
 const ENTRY_ROUTE_QUERY_KEY = "path";
@@ -96,7 +90,6 @@ function consumeAuthReturnLocation() {
     url.searchParams.delete("code");
     url.searchParams.delete("_authHandled");
     url.searchParams.delete("_authCode");
-    url.searchParams.delete("_authStage");
     url.searchParams.delete("state");
 
     const query = {};
@@ -114,24 +107,6 @@ function consumeAuthReturnLocation() {
   } catch {
     return null;
   }
-}
-
-// 再次 OAuth 的返回地址：保留业务 query，去掉一次性认证参数。
-function getCleanRouteFullPath(to) {
-  const base = import.meta.env.BASE_URL.replace(/\/$/, "");
-  const url = new URL(`${base}${to.path}`, window.location.origin);
-  Object.entries(to.query).forEach(([key, value]) => {
-    if (value == null) return;
-    const list = Array.isArray(value) ? value : [value];
-    list.forEach((item) => url.searchParams.append(key, String(item)));
-  });
-  url.searchParams.delete("code");
-  url.searchParams.delete("_authHandled");
-  url.searchParams.delete("_authCode");
-  url.searchParams.delete("_authStage");
-  url.searchParams.delete("state");
-  url.hash = to.hash || "";
-  return `${url.pathname}${url.search}${url.hash}`;
 }
 
 function setDocumentTitle(title) {
@@ -157,36 +132,13 @@ router.beforeEach(async (to) => {
       ? String(to.query.code)
       : "";
   const entryRouteRedirect = resolveEntryRouteRedirect(to);
-  console.log('entryRouteRedirect',entryRouteRedirect);
-
   if (!code) {
     if (entryRouteRedirect) return entryRouteRedirect;
     return true;
   }
 
-  const queryStage = String(to.query._authStage || "");
-  console.log('queryStage',queryStage);
-
-  const stateStage =
-    String(to.query.state || "") === AUTH_STAGE_PCENTER
-      ? AUTH_STAGE_PCENTER
-      : "";
-
-  const authStage =
-    queryStage || stateStage || sessionStorage.getItem(AUTH_STAGE_KEY) || "";
-  console.log("[router-auth] code callback", {
-    codeLen: code.length,
-    queryStage,
-    state: to.query.state,
-    sessionStage: sessionStorage.getItem(AUTH_STAGE_KEY),
-    authStage,
-  });
-
-  if (
-    to.query._authHandled === "1" &&
-    to.query._authCode === code &&
-    String(to.query._authStage || "") === authStage
-  ) {
+  // 避免同一个 code 因 replace 后再次进入守卫时重复换 token。
+  if (to.query._authHandled === "1" && to.query._authCode === code) {
     if (entryRouteRedirect) return entryRouteRedirect;
     return true;
   }
@@ -195,45 +147,22 @@ router.beforeEach(async (to) => {
     ...to.query,
     _authHandled: "1",
     _authCode: code,
-    _authStage: authStage,
   };
   setAuthCodeHandling(true);
   try {
-    if (authStage === AUTH_STAGE_PCENTER) {
-      await getPcenterTokenByCode(code);
-      sessionStorage.removeItem(AUTH_STAGE_KEY);
-      sessionStorage.removeItem(AUTH_ERROR_KEY);
-      const returnLocation = consumeAuthReturnLocation();
-      if (returnLocation) return returnLocation;
-      delete nextQuery.code;
-      delete nextQuery._authCode;
-      delete nextQuery._authStage;
-      delete nextQuery.state;
-      return resolveCleanRouteLocation(to, nextQuery);
-    }
-
-    await getAuthTokenByCode(code)
-
-    // 主 token 成功后，准备进入 pcenter 认证阶段
-    sessionStorage.removeItem(AUTH_ERROR_KEY)
-    sessionStorage.setItem(
-      AUTH_STAGE_KEY,
-      AUTH_STAGE_PCENTER
-    )
-
-    // 再次 OAuth，获得用于 pcenter 的新 code
-    redirectToQywxOAuth(getCleanRouteFullPath(to), {
-      state: AUTH_STAGE_PCENTER,
-    })
-
-    return false
-
+    await getAuthTokenByCode(code);
+    sessionStorage.removeItem(AUTH_ERROR_KEY);
+    const returnLocation = consumeAuthReturnLocation();
+    if (returnLocation) return returnLocation;
+    delete nextQuery.code;
+    delete nextQuery._authCode;
+    delete nextQuery.state;
+    return resolveCleanRouteLocation(to, nextQuery);
   } catch (e) {
     console.error("[router] code 换 token 失败", e?.message || e, e);
     sessionStorage.setItem(
       AUTH_ERROR_KEY,
       JSON.stringify({
-        stage: authStage || "main",
         message: e?.message || String(e),
         time: new Date().toISOString(),
       }),
@@ -247,7 +176,6 @@ router.beforeEach(async (to) => {
     if (returnLocation) return returnLocation;
     delete nextQuery.code;
     delete nextQuery._authCode;
-    delete nextQuery._authStage;
     delete nextQuery.state;
   } catch {
     // ignore

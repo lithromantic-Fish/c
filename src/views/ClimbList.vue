@@ -264,7 +264,7 @@ import {
   advancedHasConditions,
   resetFilter,
 } from "@/store/modules/filter";
-import { resumePendingPcenterOpen, toDeal } from "@/utils/workflowOpen";
+import { toDeal } from "@/utils/workflowOpen";
 import { ROUTES } from "@/constants/routes";
 import {
   PROXY_SCOPE_ALL,
@@ -724,7 +724,6 @@ onMounted(async () => {
   captureProxyViewportHeight();
   window.addEventListener("orientationchange", onOrientationChange);
   syncPageTitle();
-  if (resumePendingPcenterOpen()) return;
   if (isProxyTab.value) {
     await resetProxyAndLoad();
     resizeTabsLine();
@@ -742,7 +741,6 @@ const skipNextActivatedLoad = ref(true);
 onActivated(async () => {
   if (isProxyTab.value) captureProxyViewportHeight();
   syncPageTitle();
-  if (resumePendingPcenterOpen()) return;
   if (skipNextActivatedLoad.value) {
     skipNextActivatedLoad.value = false;
     return;
