@@ -12,6 +12,9 @@ export const proxyFlowTree = ref([]);
 export const proxyTimeOptions = ref([]);
 export const proxyRecords = ref([]);
 
+/** 列表页搜索框；提到 store 是为了让高级筛选应用后能把它重置 */
+export const proxyKeyword = ref("");
+
 export const proxyFilterState = reactive({
   agentId: "",
   agentName: "",

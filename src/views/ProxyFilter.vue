@@ -86,6 +86,7 @@ import {
   ensureProxyTimeOptions,
   proxyDepartmentTree,
   proxyFilterState,
+  proxyKeyword,
   proxyTimeOptions,
   resetProxyFilter,
 } from "@/store/proxy";
@@ -162,6 +163,8 @@ function reset() {
 
 function confirm() {
   Object.assign(proxyFilterState, draft);
+  // 高级筛选优先级更高，清掉列表搜索框，避免框里残留的关键词与实际筛选结果不符
+  proxyKeyword.value = "";
   showToast("筛选已应用");
   router.back();
 }

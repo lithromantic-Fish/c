@@ -272,11 +272,10 @@ import {
   appendProxyRecords,
   assertProxySuccess,
   deleteProxyRecord,
-  ensureProxyPeople,
   hasProxyFilter,
   mapProxyRecord,
   proxyFilterState,
-  proxyPeople,
+  proxyKeyword,
   proxyRecords,
   setProxyRecords,
   unwrapProxyPayload,
@@ -749,6 +748,8 @@ onActivated(async () => {
     return;
   }
   if (isProxyTab.value) {
+    // 高级筛选应用时会清空搜索框，这里取消它排上的防抖搜索，避免与本次重载重复请求
+    clearTimeout(proxySearchTimer);
     await resetProxyAndLoad();
     resizeTabsLine();
     return;
@@ -796,7 +797,6 @@ const goFilter = () => {
   router.push("/uniflow/front/pages/AdvancedFilter");
 };
 
-const proxyKeyword = ref("");
 const proxyFilterActive = computed(() => hasProxyFilter());
 const visibleProxyRecords = computed(() => {
   if (!proxyFilterState.scope) return proxyRecords.value;
@@ -810,29 +810,20 @@ const proxyLoadError = ref(false);
 const proxyRefreshing = ref(false);
 let proxyFetchGeneration = 0;
 
-function normalizeProxyPerson(value) {
-  return String(value || "")
-    .normalize("NFKC")
-    .replace(/\s+/g, "")
-    .toLowerCase();
-}
-
-function resolveProxyAgentId() {
-  const rawKeyword = proxyKeyword.value.trim();
-  const keyword = normalizeProxyPerson(rawKeyword);
-  if (!keyword) return proxyFilterState.agentId || "";
-  const person =
-    proxyPeople.value.find((item) => normalizeProxyPerson(item.id) === keyword) ||
-    proxyPeople.value.find((item) => normalizeProxyPerson(item.name) === keyword) ||
-    proxyPeople.value.find((item) =>
-      normalizeProxyPerson(item.name).includes(keyword),
-    );
-  return person?.id || rawKeyword;
+/**
+ * 代理人查询条件，高级筛选优先于搜索框，两者互斥只传其一：
+ * - 高级筛选是从人员树选的，有工号，走 agentId 精确匹配，避免同名员工被一起带出
+ * - 搜索框是自由输入，拿不到工号，按 agentName 交给后端模糊搜
+ */
+function resolveProxyAgent() {
+  if (proxyFilterState.agentId)
+    return { agentId: proxyFilterState.agentId, agentName: "" };
+  return { agentId: "", agentName: proxyKeyword.value.trim() };
 }
 
 function buildProxyParams(pageNum) {
   return {
-    agentId: resolveProxyAgentId(),
+    ...resolveProxyAgent(),
     workflowCode: proxyFilterState.workflowCode || "",
     pageNum,
     pageSize,
@@ -877,19 +868,13 @@ async function loadProxyNextPage() {
 }
 
 async function resetProxyAndLoad() {
-  const generation = ++proxyFetchGeneration;
+  proxyFetchGeneration += 1;
   setProxyRecords([]);
   proxyPage.value = 0;
   proxyTotal.value = 0;
   proxyFinished.value = false;
   proxyLoadError.value = false;
   proxyLoading.value = true;
-  try {
-    await ensureProxyPeople();
-  } catch (error) {
-    console.error("[proxy-people] load failed:", error);
-  }
-  if (generation !== proxyFetchGeneration) return;
   await loadProxyNextPage();
 }
 
